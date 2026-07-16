@@ -17,10 +17,11 @@ const NAV_ITEMS: NavItem[] = [
 ];
 
 const NAV_CADASTROS: NavItem[] = [
-  { label: "Contas bancárias", href: "/cadastros/contas-bancarias", disabled: true },
-  { label: "Contrapartes", href: "/cadastros/contrapartes", disabled: true },
-  { label: "Plano de contas", href: "/cadastros/plano-de-contas", disabled: true },
-  { label: "Centros de custo", href: "/cadastros/centros-de-custo", disabled: true },
+  { label: "Plano de contas", href: "/cadastros/plano-de-contas" },
+  { label: "Centros de custo", href: "/cadastros/centros-de-custo" },
+  { label: "Contas bancárias", href: "/cadastros/contas-bancarias" },
+  { label: "Contrapartes", href: "/cadastros/contrapartes" },
+  { label: "Formas de pagamento", href: "/cadastros/formas-pagamento" },
 ];
 
 const NAV_ADMIN: NavItem[] = [

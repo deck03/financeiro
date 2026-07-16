@@ -37,10 +37,13 @@ Você tem duas opções.
 ### Opção A — pelo painel do Supabase (mais simples)
 
 1. No painel do Supabase, vá em **SQL Editor**.
-2. Abra o arquivo `supabase/migrations/0001_fundacao.sql` deste projeto, copie todo o conteúdo e cole no SQL Editor. Execute (**Run**).
-3. Repita o mesmo processo com `supabase/seed.sql`.
+2. Rode, **nesta ordem**, colando o conteúdo de cada arquivo em uma nova query e clicando **Run**:
+   1. `supabase/migrations/0001_fundacao.sql`
+   2. `supabase/seed.sql`
+   3. `supabase/migrations/0002_cadastros_financeiros.sql` (Fase 2)
+   4. `supabase/seed_fase2.sql` (Fase 2 — plano de contas sugerido, centros de custo, contas C6, contrapartes dos agregadores e formas de pagamento)
 
-### Opção B — pela Supabase CLI (recomendado a partir da Fase 2, quando houver mais migrations)
+### Opção B — pela Supabase CLI (recomendado a partir de várias migrations)
 
 ```bash
 # instalar a CLI (se ainda não tiver)
@@ -52,11 +55,12 @@ supabase login
 # vincular este projeto local ao projeto remoto do Supabase
 supabase link --project-ref <SEU_PROJECT_REF>
 
-# aplicar as migrations
+# aplicar as migrations (0001 e 0002)
 supabase db push
 
-# rodar o seed
+# rodar os seeds
 supabase db execute -f supabase/seed.sql
+supabase db execute -f supabase/seed_fase2.sql
 ```
 
 > O `<SEU_PROJECT_REF>` fica em **Project Settings → General → Reference ID**.
@@ -240,5 +244,99 @@ autenticação, validação e estilo.
 
 **Fase 2 — Cadastros financeiros**: famílias, categorias, subcategorias, centros de custo,
 contas bancárias, contrapartes, formas de pagamento e configurações dos dados do DECK 03.
+
+Não inicie esta fase automaticamente — aguarde autorização.
+
+---
+
+# Fase 2 — Cadastros financeiros
+
+## O que foi entregue
+
+### Funcionalidades implementadas
+- Plano de contas (Famílias → Categorias → Subcategorias), com definição de comportamento
+  na DRE e no fluxo de caixa por categoria
+- Centros de custo (com centro de custo padrão)
+- Contas bancárias, com separação clara entre contas empresariais e pessoais
+- Contrapartes (com múltiplos tipos por cadastro: locatário, fornecedor, agregador, sócio, etc.)
+- Formas de pagamento
+- Inativação (em vez de exclusão definitiva) em todos os cadastros
+
+### Telas criadas
+- `/cadastros/plano-de-contas`
+- `/cadastros/centros-de-custo`
+- `/cadastros/contas-bancarias`
+- `/cadastros/contrapartes`
+- `/cadastros/formas-pagamento`
+
+### Banco de dados
+**Migration:** `supabase/migrations/0002_cadastros_financeiros.sql`
+**Seed:** `supabase/seed_fase2.sql`
+
+**Tabelas criadas:** `chart_account_families`, `chart_account_categories`,
+`chart_account_subcategories`, `cost_centers`, `bank_accounts`, `counterparties`,
+`payment_methods`
+
+**Novas permissões:** `alterar_centros_de_custo`, `alterar_formas_pagamento`
+(as demais — `alterar_plano_de_contas`, `alterar_contas_bancarias`, `criar_contrapartes`,
+`editar_contrapartes` — já existiam desde a Fase 1)
+
+**Políticas de RLS:** leitura liberada para qualquer usuário autenticado da mesma organização;
+escrita exige a permissão granular correspondente; contas bancárias com `ownership = 'pessoa_fisica'`
+só aparecem para quem tem a permissão `visualizar_contas_pessoais`.
+
+### Decisões tomadas nesta fase
+- **Sem exclusão definitiva**: todos os cadastros usam inativação (ativo/inativo). Evita o
+  problema de excluir um cadastro que já tenha lançamentos vinculados (o sistema ainda não
+  tem lançamentos — essa regra já vem pronta para quando a Fase 3 chegar).
+- **Comportamento de DRE/fluxo de caixa vive na Categoria**, não na Família nem na
+  Subcategoria. A família só agrupa; a subcategoria herda o comportamento da categoria-mãe.
+  Isso evita a inconsistência entre níveis que o escopo original proíbe (seção 39).
+- **Tipos de contraparte como array** (`text[]`) em vez de tabela de junção separada — mais
+  simples de administrar, mantendo a regra de que uma contraparte pode ter mais de um tipo.
+
+## Como testar
+
+1. Rode a migration e o seed da Fase 2 (seção 3 acima) e depois `npm run build` / `npm test`
+   localmente (ou apenas acompanhe o deploy automático na Vercel).
+2. Como administrador, acesse **Plano de contas** — deve aparecer a estrutura sugerida
+   (Receitas operacionais, Despesas, Investimentos, Movimentações de sócios, etc.) já populada
+   pelo seed.
+3. Crie uma nova família, depois uma categoria vinculada a ela, depois uma subcategoria — confira
+   que aparecem na tabela correspondente.
+4. Em **Contas bancárias**, confirme que "C6 – DECK" aparece em "Contas empresariais" e "C6 –
+   Pessoa Física" aparece em "Contas pessoais" (separados).
+5. Como operador (sem a permissão `visualizar_contas_pessoais`), confirme que a seção de contas
+   pessoais nem aparece na tela.
+6. Em **Contrapartes**, confirme que Wellhub, TotalPass e ClassPass já aparecem cadastrados
+   como "Agregador".
+7. Clique em "Inativar" em qualquer cadastro e confirme que o status muda para "Inativo" sem
+   removê-lo da lista.
+
+## Critérios de aceite
+
+✅ Administrador consegue criar, editar (via inativação/reativação) e inativar cadastros
+✅ Operador respeita as permissões configuradas (RLS + checagem em Server Action)
+✅ É possível cadastrar C6 – DECK
+✅ É possível cadastrar C6 – Pessoa Física
+✅ Contas empresariais e pessoais ficam separadas na tela
+✅ Categorias permitem definir o comportamento na DRE
+✅ Categorias permitem definir o comportamento no fluxo de caixa
+
+## Pendências desta fase
+
+- Edição de campos existentes (além de ativar/inativar) ainda não tem tela própria — para
+  corrigir um cadastro, é necessário inativar e criar novamente por enquanto. Uma tela de edição
+  completa pode ser adicionada quando fizer sentido, sem bloquear o restante do sistema.
+- Reordenação manual (arrastar e soltar) do plano de contas e centros de custo não foi implementada;
+  a ordem exibida segue `display_order` definido no seed.
+- Dados bancários da contraparte (campo `bank_details`) existem no banco mas ainda não têm campo
+  no formulário — serão usados a partir da Fase 10 (recibos).
+
+## Próxima fase sugerida
+
+**Fase 3 — Lançamentos financeiros básicos**: conta a pagar, conta a receber, receita já
+recebida, despesa já paga, busca, filtros básicos, anexos, pagamento e recebimento integrais,
+cancelamento.
 
 Não inicie esta fase automaticamente — aguarde autorização.

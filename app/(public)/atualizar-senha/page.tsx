@@ -59,5 +59,3 @@ export default function AtualizarSenhaPage() {
     </div>
   );
 }
-
-"Corrige fluxo de recuperação de senha"

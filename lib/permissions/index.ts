@@ -25,7 +25,9 @@ export type PermissionKey =
   | "visualizar_logs"
   | "alterar_configuracoes"
   | "alterar_plano_de_contas"
-  | "alterar_contas_bancarias";
+  | "alterar_contas_bancarias"
+  | "alterar_centros_de_custo"
+  | "alterar_formas_pagamento";
 
 /**
  * Verifica se o usuário logado possui a permissão informada.
