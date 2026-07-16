@@ -5,6 +5,7 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { ToggleStatusButton } from "@/components/ui/toggle-status-button";
 import { NewBankAccountForm } from "./new-bank-account-form";
 import { toggleBankAccountStatusAction } from "./actions";
+import Link from "next/link";
 
 const ACCOUNT_TYPE_LABELS: Record<string, string> = {
   conta_corrente: "Conta corrente",
@@ -34,7 +35,7 @@ function AccountsTable({
             <th className="py-2 pr-4 font-medium">Conta</th>
             <th className="py-2 pr-4 font-medium">Banco</th>
             <th className="py-2 pr-4 font-medium">Tipo</th>
-            <th className="py-2 pr-4 font-medium num">Saldo inicial</th>
+            <th className="py-2 pr-4 font-medium num">Saldo atual</th>
             <th className="py-2 pr-4 font-medium">Status</th>
             {canEdit && <th className="py-2 pr-4 font-medium">Ações</th>}
           </tr>
@@ -42,10 +43,14 @@ function AccountsTable({
         <tbody>
           {accounts.map((a) => (
             <tr key={a.id} className="border-b border-base-border last:border-0">
-              <td className="py-2 pr-4 text-ink">{a.display_name}</td>
+              <td className="py-2 pr-4">
+                <Link href={`/cadastros/contas-bancarias/${a.id}`} className="text-ink hover:text-brand-accent hover:underline">
+                  {a.display_name}
+                </Link>
+              </td>
               <td className="py-2 pr-4 text-ink-soft">{a.bank_name ?? "—"}</td>
               <td className="py-2 pr-4 text-ink-soft">{ACCOUNT_TYPE_LABELS[a.account_type]}</td>
-              <td className="num py-2 pr-4 text-ink-soft">{formatCurrency(a.initial_balance)}</td>
+              <td className="num py-2 pr-4 text-ink">{formatCurrency(a.currentBalance)}</td>
               <td className="py-2 pr-4">
                 <StatusBadge status={a.status} />
               </td>
@@ -84,8 +89,15 @@ export default async function ContasBancariasPage() {
     )
     .order("display_name");
 
-  const businessAccounts = (accounts ?? []).filter((a) => a.ownership === "deck03" || a.ownership === "outro");
-  const personalAccounts = (accounts ?? []).filter((a) => a.ownership === "pessoa_fisica");
+  const accountsWithBalance = await Promise.all(
+    (accounts ?? []).map(async (a) => {
+      const { data: balance } = await supabase.rpc("bank_account_balance", { p_account_id: a.id });
+      return { ...a, currentBalance: balance ?? a.initial_balance };
+    })
+  );
+
+  const businessAccounts = accountsWithBalance.filter((a) => a.ownership === "deck03" || a.ownership === "outro");
+  const personalAccounts = accountsWithBalance.filter((a) => a.ownership === "pessoa_fisica");
 
   return (
     <div className="space-y-6">

@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { requirePermission } from "@/lib/permissions";
 import { bankAccountSchema } from "@/lib/validation/contas-bancarias";
+import { balanceSnapshotSchema } from "@/lib/validation/transferencias";
 import { revalidatePath } from "next/cache";
 
 export type FormState = { error?: string; success?: boolean };
@@ -80,4 +81,44 @@ export async function toggleBankAccountStatusAction(id: string, currentStatus: s
   const newStatus = currentStatus === "ativa" ? "inativa" : "ativa";
   await supabase.from("bank_accounts").update({ status: newStatus, updated_by: userId }).eq("id", id);
   revalidatePath("/cadastros/contas-bancarias");
+}
+
+export async function createBalanceSnapshotAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  try {
+    await requirePermission("alterar_contas_bancarias");
+  } catch {
+    return { error: "Você não tem permissão para registrar conferências de saldo." };
+  }
+
+  const parsed = balanceSnapshotSchema.safeParse({
+    bank_account_id: formData.get("bank_account_id"),
+    snapshot_date: formData.get("snapshot_date"),
+    informed_balance: formData.get("informed_balance"),
+    notes: formData.get("notes"),
+  });
+
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
+  }
+
+  const { supabase, userId, organizationId } = await getOrgIdAndUser();
+
+  const { data: calculatedBalance } = await supabase.rpc("bank_account_balance", {
+    p_account_id: parsed.data.bank_account_id,
+  });
+
+  const { error } = await supabase.from("bank_balance_snapshots").insert({
+    organization_id: organizationId,
+    bank_account_id: parsed.data.bank_account_id,
+    snapshot_date: parsed.data.snapshot_date,
+    calculated_balance: calculatedBalance ?? 0,
+    informed_balance: parsed.data.informed_balance,
+    notes: parsed.data.notes || null,
+    created_by: userId,
+  });
+
+  if (error) return { error: "Não foi possível registrar a conferência de saldo." };
+
+  revalidatePath(`/cadastros/contas-bancarias/${parsed.data.bank_account_id}`);
+  return { success: true };
 }

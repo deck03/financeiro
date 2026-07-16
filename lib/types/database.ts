@@ -781,6 +781,84 @@ export type Database = {
         };
         Relationships: [];
       };
+      transfers: {
+        Row: {
+          id: string;
+          organization_id: string;
+          from_bank_account_id: string;
+          to_bank_account_id: string;
+          amount: number;
+          transfer_date: string;
+          classification: string;
+          notes: string | null;
+          status: string;
+          created_at: string;
+          created_by: string | null;
+        };
+        Insert: {
+          id?: string;
+          organization_id: string;
+          from_bank_account_id: string;
+          to_bank_account_id: string;
+          amount: number;
+          transfer_date: string;
+          classification?: string;
+          notes?: string | null;
+          status?: string;
+          created_at?: string;
+          created_by?: string | null;
+        };
+        Update: {
+          id?: string;
+          organization_id?: string;
+          from_bank_account_id?: string;
+          to_bank_account_id?: string;
+          amount?: number;
+          transfer_date?: string;
+          classification?: string;
+          notes?: string | null;
+          status?: string;
+          created_at?: string;
+          created_by?: string | null;
+        };
+        Relationships: [];
+      };
+      bank_balance_snapshots: {
+        Row: {
+          id: string;
+          organization_id: string;
+          bank_account_id: string;
+          snapshot_date: string;
+          calculated_balance: number;
+          informed_balance: number;
+          notes: string | null;
+          created_at: string;
+          created_by: string | null;
+        };
+        Insert: {
+          id?: string;
+          organization_id: string;
+          bank_account_id: string;
+          snapshot_date: string;
+          calculated_balance: number;
+          informed_balance: number;
+          notes?: string | null;
+          created_at?: string;
+          created_by?: string | null;
+        };
+        Update: {
+          id?: string;
+          organization_id?: string;
+          bank_account_id?: string;
+          snapshot_date?: string;
+          calculated_balance?: number;
+          informed_balance?: number;
+          notes?: string | null;
+          created_at?: string;
+          created_by?: string | null;
+        };
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: {
@@ -817,6 +895,21 @@ export type Database = {
       cancel_entry: {
         Args: { p_entry_id: string; p_reason?: string | null };
         Returns: undefined;
+      };
+      bank_account_balance_at: {
+        Args: { p_account_id: string; p_as_of: string };
+        Returns: number;
+      };
+      create_transfer: {
+        Args: {
+          p_from_bank_account_id: string;
+          p_to_bank_account_id: string;
+          p_amount: number;
+          p_transfer_date: string;
+          p_classification: string;
+          p_notes?: string | null;
+        };
+        Returns: string;
       };
     };
     Enums: Record<string, never>;

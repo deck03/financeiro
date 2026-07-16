@@ -9,10 +9,11 @@ type NavItem = {
 
 const NAV_ITEMS: NavItem[] = [
   { label: "Dashboard", href: "/dashboard" },
-  { label: "Fluxo de caixa", href: "/fluxo-de-caixa", disabled: true },
+  { label: "Fluxo de caixa realizado", href: "/fluxo-de-caixa/realizado" },
+  { label: "Fluxo de caixa projetado", href: "/fluxo-de-caixa/projetado", disabled: true },
   { label: "Contas a pagar", href: "/contas-a-pagar" },
   { label: "Contas a receber", href: "/contas-a-receber" },
-  { label: "Transferências", href: "/transferencias", disabled: true },
+  { label: "Transferências", href: "/transferencias" },
   { label: "DRE gerencial", href: "/dre", disabled: true },
 ];
 

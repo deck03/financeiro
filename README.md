@@ -43,6 +43,7 @@ Você tem duas opções.
    3. `supabase/migrations/0002_cadastros_financeiros.sql` (Fase 2)
    4. `supabase/seed_fase2.sql` (Fase 2 — plano de contas sugerido, centros de custo, contas C6, contrapartes dos agregadores e formas de pagamento)
    5. `supabase/migrations/0003_lancamentos_basicos.sql` (Fase 3 — contas a pagar/receber, liquidações, anexos)
+   6. `supabase/migrations/0004_saldos_transferencias_fluxo.sql` (Fase 4 — saldos calculados, transferências, fluxo de caixa realizado)
 
 ### Opção B — pela Supabase CLI (recomendado a partir de várias migrations)
 
@@ -444,5 +445,116 @@ permissão foi necessária.
 **Fase 4 — Saldos, transferências e fluxo de caixa realizado**: saldo calculado por conta,
 extrato, fluxo de caixa realizado (entradas/saídas por período), transferências internas e
 entre conta empresarial/pessoal, conferência manual de saldo.
+
+Não inicie esta fase automaticamente — aguarde autorização.
+
+---
+
+# Fase 4 — Saldos, transferências e fluxo de caixa realizado
+
+## O que foi entregue
+
+### Funcionalidades implementadas
+- Saldo calculado por conta (inicial + liquidações + transferências), exibido na lista de
+  contas bancárias e na tela de detalhe de cada conta
+- Extrato por conta: histórico cronológico de pagamentos, recebimentos e transferências, com
+  saldo corrente
+- Transferências internas (entre duas contas DECK 03) e entre conta empresarial/pessoal — estas
+  últimas exigem uma classificação específica (nunca "transferência interna")
+- Fluxo de caixa realizado por período: saldo inicial, entradas, saídas, saldo final,
+  composição das entradas e das saídas por categoria
+- Filtro para incluir ou não contas pessoais no fluxo de caixa (fora por padrão)
+- Conferência manual de saldo bancário (compara saldo calculado com saldo informado pelo banco,
+  sem ajuste automático)
+
+### Telas criadas
+- `/transferencias` (lista + criação)
+- `/cadastros/contas-bancarias/[id]` (detalhe da conta: saldo atual, extrato, conferência)
+- `/fluxo-de-caixa/realizado`
+
+### Telas alteradas
+- `/cadastros/contas-bancarias`: agora mostra saldo atual calculado (em vez de só o saldo
+  inicial) e linka para o detalhe/extrato de cada conta
+
+### Banco de dados
+**Migration:** `supabase/migrations/0004_saldos_transferencias_fluxo.sql`
+
+**Tabelas criadas:** `transfers`, `bank_balance_snapshots`
+
+**Funções SQL criadas/atualizadas:**
+- `bank_account_balance(account_id)` — **atualizada** para incluir transferências, além das
+  liquidações já usadas na Fase 3
+- `bank_account_balance_at(account_id, data)` — saldo da conta em uma data específica (usado
+  pelo fluxo de caixa realizado; será reaproveitado pela Fase 6, fluxo projetado)
+- `create_transfer(...)` — cria a transferência de forma atômica, valida permissão e a regra de
+  classificação, registra auditoria
+- Trigger `validate_transfer()` — impede que uma transferência entre contas de titularidades
+  diferentes (empresarial ↔ pessoal) seja lançada como "transferência interna comum"
+
+**Permissões usadas:** `criar_transferencias` e `visualizar_saldos` já existiam desde a Fase 1;
+a conferência de saldo reaproveita a permissão `alterar_contas_bancarias` (decisão abaixo).
+
+### Decisões tomadas nesta fase
+- **Transferências nunca passam por `financial_entries`** — vivem em uma tabela própria
+  (`transfers`), então estruturalmente não têm como aparecer como receita ou despesa, nem
+  entrar na composição do fluxo de caixa operacional. Isso atende a exigência da seção 16 do
+  escopo sem precisar de nenhuma regra "escondendo" a transferência em telas específicas.
+- **"Não alteram o caixa consolidado"** foi implementado deixando o saldo de cada conta refletir
+  a transferência normalmente (a conta de origem cai, a de destino sobe) — quando as duas contas
+  estão dentro do mesmo conjunto considerado (ex.: duas contas empresariais no fluxo de caixa),
+  o efeito líquido soma zero automaticamente, sem precisar de exceção manual no cálculo.
+- **Conferência de saldo reaproveita a permissão `alterar_contas_bancarias`** em vez de criar
+  uma permissão nova — é uma ação administrativa sobre a conta bancária, então fez sentido
+  usar a mesma permissão já existente em vez de aumentar o catálogo sem necessidade.
+- **Sem edição/estorno de transferência nesta fase** — uma transferência lançada errada por
+  enquanto precisa ser compensada com uma transferência reversa manual. Edição/estorno de
+  transferência pode ser adicionado numa fase futura se a necessidade aparecer.
+
+## Como testar
+
+1. Rode a migration `0004_saldos_transferencias_fluxo.sql` (seção 3 acima).
+2. Em **Contas bancárias**, confirme que agora aparece "Saldo atual" (não mais só o saldo
+   inicial) — se você já pagou/recebeu algo na Fase 3, o valor deve refletir isso.
+3. Clique no nome de uma conta para abrir o detalhe — confira o extrato com as movimentações
+   que você já tinha lançado nas fases anteriores.
+4. Em **Transferências**, registre uma transferência entre "C6 – DECK" e "C6 – Pessoa Física"
+   tentando deixar a classificação como "Transferência interna" — o sistema deve rejeitar e
+   pedir uma classificação específica (ex.: "Retirada de sócio").
+5. Repita a transferência escolhendo "Retirada de sócio" — deve ser aceita. Confira que o saldo
+   de cada uma das duas contas mudou corretamente no extrato.
+6. Crie uma transferência entre duas contas empresariais (transferência interna) e confirme, no
+   **Fluxo de caixa realizado**, que ela não aparece nem em "Entradas" nem em "Saídas".
+7. Em **Fluxo de caixa realizado**, ajuste o período e confirme que os totais mudam de acordo. 
+8. Como usuário sem a permissão `visualizar_contas_pessoais`, confirme que a opção "Incluir
+   contas pessoais" nem aparece no filtro do fluxo de caixa.
+9. Na tela de detalhe de uma conta, registre uma conferência de saldo com um valor diferente
+   do saldo calculado — confirme que a diferença aparece destacada na tabela de conferências.
+
+## Critérios de aceite
+
+✅ Transferência não aparece como receita ou despesa (nunca passa por `financial_entries`)
+✅ Transferência não altera o caixa consolidado (efeito líquido zero quando ambas as contas
+   estão no mesmo conjunto considerado)
+✅ Transferência altera corretamente cada conta (saldo de origem cai, saldo de destino sobe)
+✅ Saldo empresarial não mistura valores pessoais (contas pessoais fora por padrão no fluxo de
+   caixa e nos totais; nunca somadas automaticamente)
+✅ Fluxo realizado considera apenas valores liquidados (usa `financial_settlements`, nunca o
+   valor original do lançamento)
+✅ Diferenças de saldo ficam registradas (conferência manual, sem ajuste automático/silencioso)
+
+## Pendências desta fase
+
+- Não há paginação no extrato da conta — para o volume de uso do DECK 03 (uma operação,
+  poucas contas) isso não deve ser um problema tão cedo, mas pode ser revisitado se a lista
+  crescer muito.
+- Fluxo de caixa realizado não tem exportação (CSV/Excel/PDF) ainda — isso é Fase 12
+  (Exportações), conforme planejado desde o início.
+- Transferências não têm edição nem estorno nesta fase (ver decisão acima).
+
+## Próxima fase sugerida
+
+**Fase 5 — Contas a pagar e receber avançadas**: pagamento e recebimento parcial, juros,
+multas, descontos, acréscimos, parcelamento, recorrência, agendamento, estorno, identificação
+de vencidos, ações em lote, modelos de lançamentos.
 
 Não inicie esta fase automaticamente — aguarde autorização.
