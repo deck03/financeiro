@@ -42,6 +42,7 @@ Você tem duas opções.
    2. `supabase/seed.sql`
    3. `supabase/migrations/0002_cadastros_financeiros.sql` (Fase 2)
    4. `supabase/seed_fase2.sql` (Fase 2 — plano de contas sugerido, centros de custo, contas C6, contrapartes dos agregadores e formas de pagamento)
+   5. `supabase/migrations/0003_lancamentos_basicos.sql` (Fase 3 — contas a pagar/receber, liquidações, anexos)
 
 ### Opção B — pela Supabase CLI (recomendado a partir de várias migrations)
 
@@ -338,5 +339,110 @@ só aparecem para quem tem a permissão `visualizar_contas_pessoais`.
 **Fase 3 — Lançamentos financeiros básicos**: conta a pagar, conta a receber, receita já
 recebida, despesa já paga, busca, filtros básicos, anexos, pagamento e recebimento integrais,
 cancelamento.
+
+Não inicie esta fase automaticamente — aguarde autorização.
+
+---
+
+# Fase 3 — Lançamentos financeiros básicos
+
+## O que foi entregue
+
+### Funcionalidades implementadas
+- Criação de conta a pagar e conta a receber, com opção de marcar como já paga/recebida
+  no próprio momento da criação
+- Pagamento e recebimento integral (liquidação) de lançamentos em aberto
+- Cancelamento de lançamentos (somente antes de qualquer liquidação)
+- Busca por descrição e filtro por status
+- Anexos (upload, listagem e download via link assinado, arquivo guardado em bucket privado)
+- Histórico de liquidações por lançamento
+- Totalizadores (total em aberto / total pago ou recebido) nas listas
+
+### Telas criadas
+- `/contas-a-pagar` (lista) e `/contas-a-pagar/nova` e `/contas-a-pagar/[id]` (detalhe)
+- `/contas-a-receber` (lista) e `/contas-a-receber/nova` e `/contas-a-receber/[id]` (detalhe)
+
+### Banco de dados
+**Migration:** `supabase/migrations/0003_lancamentos_basicos.sql` (sem seed nesta fase)
+
+**Tabelas criadas:** `financial_entries`, `financial_settlements`, `attachments`
+
+**Funções SQL criadas** (centralizam as regras financeiras, usadas por todas as telas):
+- `entry_remaining_balance(entry_id)` — saldo restante de um lançamento
+- `bank_account_balance(account_id)` — saldo atual de uma conta bancária
+- `settle_entry(...)` — liquida um lançamento (valor integral), atualiza status, registra auditoria
+- `cancel_entry(...)` — cancela um lançamento (somente antes de liquidação), registra auditoria
+
+**Storage:** bucket privado `attachments`, com política de acesso baseada no caminho
+`{organization_id}/{entry_id}/{arquivo}` — nenhuma organização enxerga arquivo de outra.
+
+**Permissões usadas:** todas já existiam desde a Fase 1 (`criar_lancamentos`,
+`editar_lancamentos_em_aberto`, `cancelar_lancamentos`, `registrar_pagamentos`,
+`registrar_recebimentos`, `anexar_documentos`, `visualizar_lancamentos`) — nenhuma nova
+permissão foi necessária.
+
+### Decisões tomadas nesta fase
+- **Liquidação sempre pelo valor integral** nesta fase — a estrutura de `financial_settlements`
+  já suporta múltiplas liquidações parciais por lançamento, mas a interface só permite uma
+  liquidação de valor cheio. Pagamento/recebimento parcial entram na Fase 5.
+- **Cancelamento só antes de liquidação.** Um lançamento já pago/recebido não pode ser
+  cancelado pela interface — precisa de estorno, que é uma funcionalidade da Fase 5. Isso evita
+  que um cancelamento indevido derrube o saldo de uma conta sem deixar rastro.
+- **Regras de cálculo em funções SQL** (`settle_entry`, `cancel_entry`, `entry_remaining_balance`,
+  `bank_account_balance`) em vez de replicadas em cada tela — para não haver divergência de
+  valores entre dashboard, listagens e futuros relatórios (exigência da seção 39 do escopo).
+- **Edição de lançamento em aberto** (a permissão `editar_lancamentos_em_aberto` já existe e é
+  checada na política de RLS) ainda não tem tela própria nesta fase — fica para quando a
+  necessidade aparecer, sem bloquear o restante.
+
+## Como testar
+
+1. Rode a migration `0003_lancamentos_basicos.sql` (seção 3 acima). Não há seed nesta fase.
+2. Acesse **Contas a pagar → Nova conta a pagar**. Preencha descrição, valor, vencimento e
+   categoria (obrigatórios) e salve sem marcar "já foi pago" — deve aparecer na lista como
+   "Em aberto".
+3. Clique no lançamento criado, escolha uma conta bancária e registre o pagamento — o status
+   deve mudar para "Pago" e uma liquidação deve aparecer no histórico.
+4. Crie uma nova conta a pagar marcando "já foi pago" — confira que ela já nasce com status
+   "Pago" e a liquidação já aparece no histórico, sem precisar de uma ação extra.
+5. Repita os passos 2 a 4 em **Contas a receber**, conferindo que o status vira "Recebido".
+6. Crie um lançamento em aberto e clique em **Cancelar lançamento** — confirme que o status
+   muda para "Cancelado". Tente cancelar um lançamento já pago — o botão de cancelar não deve
+   aparecer.
+7. Abra um lançamento, anexe um PDF ou imagem pequena, confirme que aparece na lista de anexos
+   e que o botão "Baixar" funciona.
+8. Use a busca por descrição e o filtro por status nas listas — confirme que os resultados
+   batem com o que foi digitado/selecionado.
+9. Como operador (sem a permissão `cancelar_lancamentos`, que não é concedida por padrão),
+   confirme que a seção de cancelamento não aparece na tela de detalhe.
+
+## Critérios de aceite
+
+✅ Operador consegue criar conta a pagar
+✅ Operador consegue criar conta a receber
+✅ Operador consegue registrar pagamento
+✅ Operador consegue registrar recebimento
+✅ O saldo da conta é atualizado corretamente (via `bank_account_balance`, considerando apenas
+   liquidações válidas)
+✅ Lançamentos cancelados não alteram o saldo (cancelamento só é permitido antes de qualquer
+   liquidação)
+✅ Permissões são respeitadas no backend (RLS + checagem dentro das funções SQL)
+
+## Pendências desta fase
+
+- Não há tela dedicada para exibir o saldo calculado da conta bancária (`bank_account_balance`)
+  ainda — isso será natural na Fase 4 (Saldos, transferências e fluxo realizado).
+- "Vencido" não é destacado nas listas ainda — o cálculo de vencido (data de vencimento no
+  passado + saldo em aberto) é responsabilidade da Fase 5, conforme planejado desde a Fase 0.
+- Ações em lote, modelos de lançamento e edição de lançamentos em aberto ficam para quando
+  fizerem falta — não bloqueiam o uso básico.
+- O upload de anexos aceita PDF, PNG, JPG e WEBP até 10 MB — outros formatos foram deixados de
+  fora deliberadamente para reduzir superfície de risco.
+
+## Próxima fase sugerida
+
+**Fase 4 — Saldos, transferências e fluxo de caixa realizado**: saldo calculado por conta,
+extrato, fluxo de caixa realizado (entradas/saídas por período), transferências internas e
+entre conta empresarial/pessoal, conferência manual de saldo.
 
 Não inicie esta fase automaticamente — aguarde autorização.

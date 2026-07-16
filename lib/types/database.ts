@@ -616,6 +616,171 @@ export type Database = {
         };
         Relationships: [];
       };
+      financial_entries: {
+        Row: {
+          id: string;
+          organization_id: string;
+          type: string;
+          description: string;
+          counterparty_id: string | null;
+          category_id: string;
+          subcategory_id: string | null;
+          cost_center_id: string | null;
+          bank_account_id: string | null;
+          payment_method_id: string | null;
+          original_amount: number;
+          issue_date: string | null;
+          competence_date: string | null;
+          due_date: string;
+          document_number: string | null;
+          notes: string | null;
+          status: string;
+          origin: string;
+          created_at: string;
+          updated_at: string;
+          created_by: string | null;
+          updated_by: string | null;
+          deleted_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          organization_id: string;
+          type: string;
+          description: string;
+          counterparty_id?: string | null;
+          category_id: string;
+          subcategory_id?: string | null;
+          cost_center_id?: string | null;
+          bank_account_id?: string | null;
+          payment_method_id?: string | null;
+          original_amount: number;
+          issue_date?: string | null;
+          competence_date?: string | null;
+          due_date: string;
+          document_number?: string | null;
+          notes?: string | null;
+          status?: string;
+          origin?: string;
+          created_at?: string;
+          updated_at?: string;
+          created_by?: string | null;
+          updated_by?: string | null;
+          deleted_at?: string | null;
+        };
+        Update: {
+          id?: string;
+          organization_id?: string;
+          type?: string;
+          description?: string;
+          counterparty_id?: string | null;
+          category_id?: string;
+          subcategory_id?: string | null;
+          cost_center_id?: string | null;
+          bank_account_id?: string | null;
+          payment_method_id?: string | null;
+          original_amount?: number;
+          issue_date?: string | null;
+          competence_date?: string | null;
+          due_date?: string;
+          document_number?: string | null;
+          notes?: string | null;
+          status?: string;
+          origin?: string;
+          created_at?: string;
+          updated_at?: string;
+          created_by?: string | null;
+          updated_by?: string | null;
+          deleted_at?: string | null;
+        };
+        Relationships: [];
+      };
+      financial_settlements: {
+        Row: {
+          id: string;
+          organization_id: string;
+          entry_id: string;
+          bank_account_id: string;
+          amount: number;
+          interest: number;
+          penalty: number;
+          discount: number;
+          settlement_date: string;
+          payment_method_id: string | null;
+          notes: string | null;
+          status: string;
+          created_at: string;
+          created_by: string | null;
+        };
+        Insert: {
+          id?: string;
+          organization_id: string;
+          entry_id: string;
+          bank_account_id: string;
+          amount: number;
+          interest?: number;
+          penalty?: number;
+          discount?: number;
+          settlement_date: string;
+          payment_method_id?: string | null;
+          notes?: string | null;
+          status?: string;
+          created_at?: string;
+          created_by?: string | null;
+        };
+        Update: {
+          id?: string;
+          organization_id?: string;
+          entry_id?: string;
+          bank_account_id?: string;
+          amount?: number;
+          interest?: number;
+          penalty?: number;
+          discount?: number;
+          settlement_date?: string;
+          payment_method_id?: string | null;
+          notes?: string | null;
+          status?: string;
+          created_at?: string;
+          created_by?: string | null;
+        };
+        Relationships: [];
+      };
+      attachments: {
+        Row: {
+          id: string;
+          organization_id: string;
+          entry_id: string;
+          file_path: string;
+          file_name: string;
+          file_size: number | null;
+          mime_type: string | null;
+          created_at: string;
+          created_by: string | null;
+        };
+        Insert: {
+          id?: string;
+          organization_id: string;
+          entry_id: string;
+          file_path: string;
+          file_name: string;
+          file_size?: number | null;
+          mime_type?: string | null;
+          created_at?: string;
+          created_by?: string | null;
+        };
+        Update: {
+          id?: string;
+          organization_id?: string;
+          entry_id?: string;
+          file_path?: string;
+          file_name?: string;
+          file_size?: number | null;
+          mime_type?: string | null;
+          created_at?: string;
+          created_by?: string | null;
+        };
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: {
@@ -630,6 +795,28 @@ export type Database = {
       auth_role_key: {
         Args: Record<string, never>;
         Returns: string;
+      };
+      entry_remaining_balance: {
+        Args: { p_entry_id: string };
+        Returns: number;
+      };
+      bank_account_balance: {
+        Args: { p_account_id: string };
+        Returns: number;
+      };
+      settle_entry: {
+        Args: {
+          p_entry_id: string;
+          p_bank_account_id: string;
+          p_settlement_date: string;
+          p_payment_method_id?: string | null;
+          p_notes?: string | null;
+        };
+        Returns: string;
+      };
+      cancel_entry: {
+        Args: { p_entry_id: string; p_reason?: string | null };
+        Returns: undefined;
       };
     };
     Enums: Record<string, never>;

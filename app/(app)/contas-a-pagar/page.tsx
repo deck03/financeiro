@@ -1,0 +1,69 @@
+import { createClient } from "@/lib/supabase/server";
+import { hasPermission } from "@/lib/permissions";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import Link from "next/link";
+import { EntryFilters } from "@/components/lancamentos/entry-filters";
+import { EntriesTable } from "@/components/lancamentos/entries-table";
+import { EntryTotals } from "@/components/lancamentos/entry-totals";
+
+export default async function ContasAPagarPage({
+  searchParams,
+}: {
+  searchParams: { q?: string; status?: string };
+}) {
+  const supabase = createClient();
+  const canCreate = await hasPermission("criar_lancamentos");
+
+  let query = supabase
+    .from("financial_entries")
+    .select(
+      "id, description, original_amount, due_date, status, counterparties(name), chart_account_categories(name)"
+    )
+    .eq("type", "despesa")
+    .order("due_date", { ascending: true });
+
+  if (searchParams.q) {
+    query = query.ilike("description", `%${searchParams.q}%`);
+  }
+  if (searchParams.status) {
+    query = query.eq("status", searchParams.status);
+  }
+
+  const { data: entries } = await query;
+
+  const { data: totalsData } = await supabase
+    .from("financial_entries")
+    .select("original_amount, status")
+    .eq("type", "despesa");
+
+  const openTotal = (totalsData ?? [])
+    .filter((e) => e.status === "em_aberto" || e.status === "agendado")
+    .reduce((sum, e) => sum + Number(e.original_amount), 0);
+  const paidTotal = (totalsData ?? [])
+    .filter((e) => e.status === "pago")
+    .reduce((sum, e) => sum + Number(e.original_amount), 0);
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-semibold text-ink">Contas a pagar</h1>
+          <p className="text-sm text-ink-soft">Despesas registradas, em aberto ou já pagas.</p>
+        </div>
+        {canCreate && (
+          <Link href="/contas-a-pagar/nova">
+            <Button>Nova conta a pagar</Button>
+          </Link>
+        )}
+      </div>
+
+      <EntryTotals openTotal={openTotal} settledTotal={paidTotal} settledLabel="Total pago" />
+
+      <Card>
+        <EntryFilters type="despesa" />
+        <EntriesTable entries={entries ?? []} basePath="/contas-a-pagar" />
+      </Card>
+    </div>
+  );
+}
