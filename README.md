@@ -691,3 +691,104 @@ em aberto, agendadas, vencidas e recorrências futuras; projeções de 7/15/30/6
 saldo projetado e data; drill-down até os lançamentos de origem.
 
 Não inicie esta fase automaticamente — aguarde autorização.
+
+---
+
+# Fase 6 — Fluxo de caixa projetado
+
+## O que foi entregue
+
+### Funcionalidades implementadas
+- Projeção de caixa a partir do saldo atual (já calculado desde a Fase 4) somado ao saldo
+  restante de todos os lançamentos em aberto, agendados, parcialmente liquidados e vencidos
+- Horizontes de 7, 15, 30, 60 ou 90 dias, ou uma data personalizada
+- Menor saldo projetado no período e a data em que ocorre
+- Contagem de dias com saldo projetado negativo
+- Entradas e saídas previstas, separadas
+- Lançamentos que mais impactam o caixa (maiores valores restantes), cada um linkando direto
+  para o lançamento de origem
+- Evolução do saldo projetado dia a dia (mostrado como tabela, não gráfico — ver decisão abaixo)
+- Filtro por conta específica e opção de incluir contas pessoais (fora por padrão)
+
+### Telas alteradas
+- `/fluxo-de-caixa/projetado`: deixou de ser um placeholder desabilitado no menu e ganhou a
+  implementação completa
+
+### Banco de dados
+**Nenhuma migration nova nesta fase.** Toda a projeção foi construída reaproveitando o que já
+existia: a função `bank_account_balance` (Fase 4) para o saldo atual, e a mesma fórmula de
+saldo restante da Fase 5 (`entry_remaining_balance`), replicada em TypeScript
+(`lib/finance/remaining.ts`) para poder ser calculada em lote para várias dezenas de
+lançamentos de uma vez, sem uma chamada ao banco por lançamento.
+
+### Decisões tomadas nesta fase
+- **A fórmula de saldo restante foi replicada em TypeScript**, não chamada via RPC por
+  lançamento — evita um problema de N+1 consultas ao projetar dezenas de lançamentos de uma
+  vez. O arquivo `lib/finance/remaining.ts` deixa explícito que espelha a função SQL
+  `entry_remaining_balance` e que as duas precisam mudar juntas se a regra mudar no futuro.
+- **Lançamentos vencidos são "encostados" em hoje na projeção** — como não sabemos exatamente
+  quando um lançamento atrasado será liquidado, ele entra no cálculo já a partir do primeiro
+  dia do horizonte, em vez de aparecer na sua data de vencimento original (que já passou).
+- **Recorrências futuras não precisaram de tratamento especial**: como a Fase 5 já gera as
+  ocorrências futuras como lançamentos normais (`financial_entries` com `origin = 'recorrencia'`),
+  elas aparecem automaticamente na projeção junto com qualquer outro lançamento em aberto —
+  sem necessidade de uma consulta separada.
+- **Evolução do saldo mostrada como tabela, não gráfico de linha.** Não instalamos nenhuma
+  biblioteca de gráficos no projeto ainda, e o princípio do escopo é priorizar funcionalidade
+  sobre efeito visual — uma tabela com data, movimentação e saldo acumulado é totalmente
+  auditável (dá pra conferir cada linha) e comunica a mesma informação. Se mais adiante um
+  gráfico for realmente necessário (ex.: Fase 7, dashboard executivo), avaliamos introduzir uma
+  biblioteca então.
+- **Lançamentos sem conta bancária definida** entram na projeção agregada (todas as contas)
+  mas ficam de fora quando o filtro de "conta específica" é usado — like esperado, já que não
+  têm como saber a qual conta pertencem antes de serem liquidados.
+
+## Como testar
+
+1. Nenhuma migration nova — não é necessário rodar nada no Supabase para esta fase.
+2. Acesse **Fluxo de caixa projetado**. Confirme que "Saldo atual" bate com o saldo mostrado em
+   Contas bancárias.
+3. Crie (ou use lançamentos já existentes) uma conta a pagar com vencimento daqui a 10 dias e
+   uma conta a receber com vencimento daqui a 20 dias, ambas em aberto.
+4. No horizonte de "7 dias", confirme que nenhuma das duas aparece na tabela de evolução (estão
+   fora da janela). Mude para "30 dias" — as duas devem aparecer, cada uma na data certa.
+5. Confirme que o "Saldo projetado" no horizonte de 30 dias é igual ao saldo atual mais a
+   receita menos a despesa lançadas.
+6. Crie uma despesa grande o suficiente para deixar o saldo projetado negativo em algum
+   momento — confirme que "Menor saldo projetado" e "Dias com saldo negativo" refletem isso
+   corretamente.
+7. Pague parcialmente uma conta a pagar em aberto (Fase 5) — confirme que, na projeção, o valor
+   restante considerado é só o saldo que falta, não o valor original.
+8. Clique em um lançamento na lista "Lançamentos que mais impactam o caixa" — confirme que abre
+   o lançamento de origem.
+9. Como usuário sem `visualizar_contas_pessoais`, confirme que a opção "Incluir contas
+   pessoais" não aparece no filtro.
+
+## Critérios de aceite
+
+✅ Valores realizados não são duplicados (a projeção parte do saldo atual, que já reflete tudo
+   que foi liquidado — só o saldo restante de lançamentos em aberto é somado por cima)
+✅ Pagamentos parciais consideram apenas o saldo restante (mesma fórmula da Fase 5, replicada
+   em lote)
+✅ Filtros alteram corretamente a projeção (horizonte, conta específica, contas pessoais)
+✅ Contas pessoais ficam fora por padrão
+✅ Valores projetados podem ser rastreados até a origem (cada lançamento na lista de maior
+   impacto linka direto para o lançamento correspondente)
+
+## Pendências desta fase
+
+- Sem gráfico de evolução — decisão consciente, ver acima. Pode ser adicionado depois sem
+  quebrar nada, já que os dados (`checkpoints`) já estão estruturados para isso.
+- A projeção considera todo lançamento em aberto igualmente provável de acontecer na data de
+  vencimento — não há um conceito de "probabilidade" ou cenários otimista/pessimista.
+- Filtro por família/categoria/centro de custo na projeção não foi incluído (o escopo original
+  não exige isso especificamente aqui — esse tipo de recorte já existe no fluxo de caixa
+  realizado, Fase 4, e pode ser adicionado aqui do mesmo jeito se fizer falta).
+
+## Próxima fase sugerida
+
+**Fase 7 — Dashboard do CEO**: visão executiva consolidando saldo, caixa projetado, contas a
+pagar/receber, maiores entradas/saídas e alertas, priorizando os indicadores de caixa acima de
+tudo.
+
+Não inicie esta fase automaticamente — aguarde autorização.
