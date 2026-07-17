@@ -792,3 +792,95 @@ pagar/receber, maiores entradas/saídas e alertas, priorizando os indicadores de
 tudo.
 
 Não inicie esta fase automaticamente — aguarde autorização.
+
+---
+
+# Fase 7 — Dashboard do CEO
+
+## O que foi entregue
+
+### Funcionalidades implementadas
+- Dashboard executivo em `/dashboard`, organizado na mesma ordem de prioridade do escopo:
+  1. **Alertas** (se houver, aparecem no topo — nunca escondidos)
+  2. **Caixa**: saldo empresarial disponível, saldo por conta, saldo pessoal separado, geração
+     de caixa no mês, caixa projetado em 7/30/90 dias, menor saldo projetado
+  3. **Contas a pagar e a receber**: total em aberto e vencido de cada um
+  4. **Maiores entradas e saídas do mês**
+  5. **Indicadores secundários**: receita e despesa do mês (com variação percentual vs. mês
+     anterior), resultado operacional preliminar, despesas por categoria, receitas por origem
+- Todo card com valor é clicável e leva para a tela de origem daquele número (saldo → conta
+  bancária, contas vencidas → lista filtrada, caixa projetado → tela de projeção)
+- Alertas acionáveis: caixa projetado negativo nos próximos 30 dias, contas vencidas (a pagar e
+  a receber), saldo de conta abaixo do mínimo configurado, diferença de conferência de saldo
+  ainda não resolvida
+
+### Banco de dados
+**Nenhuma migration nova nesta fase.** O dashboard é inteiramente composto por dados já
+existentes, consultados através das mesmas funções e regras das fases anteriores.
+
+### Refatoração importante
+A lógica de projeção de caixa (antes só dentro da tela de Fluxo de Caixa Projetado) foi extraída
+para `lib/finance/projection-query.ts` e agora é usada tanto por aquela tela quanto pelo
+dashboard. Isso garante que "caixa projetado em 30 dias" mostre exatamente o mesmo valor nos
+dois lugares — sem essa extração, seria fácil as duas implementações divergirem com o tempo.
+
+### Decisões tomadas nesta fase
+- **Resultado operacional é "preliminar"** e está rotulado como tal na tela — usa o
+  `dre_behavior` das categorias (já existente desde a Fase 2) para separar o que é operacional
+  do que não é, mas ainda não é uma DRE completa (isso é a Fase 8). Serve como um indicador
+  direcional, não definitivo.
+- **Comparação com o mês anterior** é simples (mês atual até hoje vs. mês anterior completo) —
+  não é a comparação trimestral rigorosa que o escopo pede na Fase 8; está claramente rotulada
+  como indicador secundário.
+- **Alertas implementados nesta fase**: caixa projetado negativo, contas vencidas, saldo abaixo
+  do mínimo, diferença de conferência não resolvida. Alertas que dependem de funcionalidades
+  ainda não construídas (conciliação bancária, importação OFX) ficam para as fases
+  correspondentes — não fazia sentido simular um alerta para algo que o sistema ainda não faz.
+- **Nenhuma biblioteca de gráficos foi adicionada** — mesma decisão da Fase 6, mantendo
+  consistência. O dashboard comunica os números através de cards e listas, não gráficos.
+
+## Como testar
+
+1. Nenhuma migration nova — não precisa rodar nada no Supabase.
+2. Acesse o **Dashboard**. Confirme que "Saldo empresarial disponível" bate com a soma das
+   contas empresariais em Contas Bancárias.
+3. Confirme que "Caixa projetado em 30 dias" é igual ao que aparece em Fluxo de Caixa
+   Projetado com o horizonte de 30 dias selecionado.
+4. Crie ou deixe um lançamento vencido em aberto — confirme que aparece um alerta vermelho no
+   topo do dashboard, e que clicar nele leva para a lista filtrada por "Vencido".
+5. Configure um "saldo mínimo desejado" numa conta bancária (Fase 2) maior que o saldo atual —
+   confirme que aparece o alerta correspondente.
+6. Registre uma conferência de saldo (Fase 4) com diferença — confirme que aparece o alerta de
+   diferença não resolvida.
+7. Como usuário sem `visualizar_contas_pessoais`, confirme que a seção "Saldo pessoal" não
+   aparece.
+8. Clique em um item de "Maiores entradas/saídas do mês" — hoje eles não linkam individualmente
+   (ver pendências), mas confirme que os valores batem com o Fluxo de Caixa Realizado do mês.
+
+## Critérios de aceite
+
+✅ O CEO entende a posição financeira em poucos minutos (caixa em primeiro lugar, alertas no
+   topo, tudo em uma tela)
+✅ Os valores correspondem às telas de origem (mesma função de saldo da Fase 4, mesma lógica de
+   projeção da Fase 6, extraída para um módulo compartilhado)
+✅ Cards relevantes possuem detalhamento (praticamente todo card linka para a tela de origem)
+✅ Alertas direcionam para os lançamentos relacionados
+
+## Pendências desta fase
+
+- Os itens de "Maiores entradas/saídas do mês" ainda não linkam individualmente para o
+  lançamento — mostram a descrição e o valor, mas sem link direto (diferente dos cards
+  principais, que já linkam). Pode ser ajustado numa passada futura sem mudança de schema.
+- Alertas de conciliação bancária ("transação não conciliada") e de recorrência esperada não
+  criada ficam para quando as funcionalidades correspondentes existirem (Fase 9 e melhorias
+  futuras de recorrência).
+- Sem opção de personalizar quais indicadores aparecem no dashboard — a ordem e a seleção
+  seguem a priorização do escopo original.
+
+## Próxima fase sugerida
+
+**Fase 8 — DRE gerencial e comparação trimestral**: DRE por caixa e por competência, com
+drill-down até os lançamentos; comparação trimestral rigorosa (trimestre atual vs. anterior, e
+vs. mesmo trimestre do ano anterior).
+
+Não inicie esta fase automaticamente — aguarde autorização.

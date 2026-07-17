@@ -2,11 +2,8 @@ import { createClient } from "@/lib/supabase/server";
 import { hasPermission } from "@/lib/permissions";
 import { Card } from "@/components/ui/card";
 import { ProjectionFilter } from "./projection-filter";
-import { computeRemainingBalance } from "@/lib/finance/remaining";
-import { projectCashflow, type ProjectionMovement } from "@/lib/finance/projection";
+import { computeCashflowProjection, addDays } from "@/lib/finance/projection-query";
 import Link from "next/link";
-
-const OPEN_STATUSES = ["em_aberto", "agendado", "parcialmente_pago", "parcialmente_recebido"];
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
@@ -31,9 +28,7 @@ export default async function FluxoDeCaixaProjetadoPage({
 
   const today = toISODate(new Date());
   const horizonDays = searchParams.to ? null : Number(searchParams.horizon || "30");
-  const horizonEnd = searchParams.to
-    ? searchParams.to
-    : toISODate(new Date(Date.now() + horizonDays! * 24 * 60 * 60 * 1000));
+  const horizonEnd = searchParams.to ? searchParams.to : addDays(today, horizonDays!);
 
   const includePersonal = searchParams.personal === "1" && canSeePersonal;
   const accountFilter = searchParams.account || "";
@@ -50,62 +45,8 @@ export default async function FluxoDeCaixaProjetadoPage({
   });
   const accountIds = includedAccounts.map((a) => a.id);
 
-  const currentBalanceResults = await Promise.all(
-    accountIds.map((id) => supabase.rpc("bank_account_balance", { p_account_id: id }))
-  );
-  const currentBalance = currentBalanceResults.reduce((sum, r) => sum + Number(r.data ?? 0), 0);
-
-  let openEntries: any[] = [];
-
-  if (accountFilter) {
-    const { data } = await supabase
-      .from("financial_entries")
-      .select("id, type, description, original_amount, due_date, bank_account_id")
-      .in("status", OPEN_STATUSES)
-      .lte("due_date", horizonEnd)
-      .eq("bank_account_id", accountFilter);
-    openEntries = data ?? [];
-  } else if (accountIds.length > 0) {
-    const { data } = await supabase
-      .from("financial_entries")
-      .select("id, type, description, original_amount, due_date, bank_account_id")
-      .in("status", OPEN_STATUSES)
-      .lte("due_date", horizonEnd)
-      .or(`bank_account_id.in.(${accountIds.join(",")}),bank_account_id.is.null`);
-    openEntries = data ?? [];
-  }
-
-  const entryIds = openEntries.map((e) => e.id);
-
-  const { data: settlements } =
-    entryIds.length > 0
-      ? await supabase
-          .from("financial_settlements")
-          .select("entry_id, amount, interest, penalty, discount, addition, status")
-          .in("entry_id", entryIds)
-      : { data: [] as any[] };
-
-  const entriesWithRemaining = openEntries
-    .map((e) => ({
-      ...e,
-      remaining: computeRemainingBalance(Number(e.original_amount), e.id, settlements ?? []),
-      effectiveDate: e.due_date < today ? today : e.due_date,
-    }))
-    .filter((e) => e.remaining > 0.004);
-
-  const movements: ProjectionMovement[] = entriesWithRemaining.map((e) => ({
-    date: e.effectiveDate,
-    amount: e.type === "receita" ? e.remaining : -e.remaining,
-  }));
-
-  const projection = projectCashflow(currentBalance, movements, today, horizonEnd);
-
-  const entradasPrevistas = entriesWithRemaining
-    .filter((e) => e.type === "receita")
-    .reduce((sum, e) => sum + e.remaining, 0);
-  const saidasPrevistas = entriesWithRemaining
-    .filter((e) => e.type === "despesa")
-    .reduce((sum, e) => sum + e.remaining, 0);
+  const { currentBalance, projection, entriesWithRemaining, entradasPrevistas, saidasPrevistas } =
+    await computeCashflowProjection(supabase, accountIds, today, horizonEnd, accountFilter || undefined);
 
   const topImpact = [...entriesWithRemaining].sort((a, b) => b.remaining - a.remaining).slice(0, 10);
 
