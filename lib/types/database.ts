@@ -636,6 +636,10 @@ export type Database = {
           notes: string | null;
           status: string;
           origin: string;
+          installment_group_id: string | null;
+          installment_number: number | null;
+          installment_total: number | null;
+          recurring_rule_id: string | null;
           created_at: string;
           updated_at: string;
           created_by: string | null;
@@ -661,6 +665,10 @@ export type Database = {
           notes?: string | null;
           status?: string;
           origin?: string;
+          installment_group_id?: string | null;
+          installment_number?: number | null;
+          installment_total?: number | null;
+          recurring_rule_id?: string | null;
           created_at?: string;
           updated_at?: string;
           created_by?: string | null;
@@ -686,11 +694,123 @@ export type Database = {
           notes?: string | null;
           status?: string;
           origin?: string;
+          installment_group_id?: string | null;
+          installment_number?: number | null;
+          installment_total?: number | null;
+          recurring_rule_id?: string | null;
           created_at?: string;
           updated_at?: string;
           created_by?: string | null;
           updated_by?: string | null;
           deleted_at?: string | null;
+        };
+        Relationships: [];
+      };
+      installment_groups: {
+        Row: {
+          id: string;
+          organization_id: string;
+          description: string;
+          total_amount: number;
+          installments_count: number;
+          recognition_strategy: string;
+          created_at: string;
+          created_by: string | null;
+        };
+        Insert: {
+          id?: string;
+          organization_id: string;
+          description: string;
+          total_amount: number;
+          installments_count: number;
+          recognition_strategy?: string;
+          created_at?: string;
+          created_by?: string | null;
+        };
+        Update: {
+          id?: string;
+          organization_id?: string;
+          description?: string;
+          total_amount?: number;
+          installments_count?: number;
+          recognition_strategy?: string;
+          created_at?: string;
+          created_by?: string | null;
+        };
+        Relationships: [];
+      };
+      recurring_rules: {
+        Row: {
+          id: string;
+          organization_id: string;
+          type: string;
+          description: string;
+          counterparty_id: string | null;
+          category_id: string;
+          subcategory_id: string | null;
+          cost_center_id: string | null;
+          bank_account_id: string | null;
+          payment_method_id: string | null;
+          amount: number;
+          frequency: string;
+          interval_count: number;
+          start_date: string;
+          end_date: string | null;
+          max_occurrences: number | null;
+          adjust_business_day: boolean;
+          status: string;
+          created_at: string;
+          updated_at: string;
+          created_by: string | null;
+          updated_by: string | null;
+        };
+        Insert: {
+          id?: string;
+          organization_id: string;
+          type: string;
+          description: string;
+          counterparty_id?: string | null;
+          category_id: string;
+          subcategory_id?: string | null;
+          cost_center_id?: string | null;
+          bank_account_id?: string | null;
+          payment_method_id?: string | null;
+          amount: number;
+          frequency: string;
+          interval_count?: number;
+          start_date: string;
+          end_date?: string | null;
+          max_occurrences?: number | null;
+          adjust_business_day?: boolean;
+          status?: string;
+          created_at?: string;
+          updated_at?: string;
+          created_by?: string | null;
+          updated_by?: string | null;
+        };
+        Update: {
+          id?: string;
+          organization_id?: string;
+          type?: string;
+          description?: string;
+          counterparty_id?: string | null;
+          category_id?: string;
+          subcategory_id?: string | null;
+          cost_center_id?: string | null;
+          bank_account_id?: string | null;
+          payment_method_id?: string | null;
+          amount?: number;
+          frequency?: string;
+          interval_count?: number;
+          start_date?: string;
+          end_date?: string | null;
+          max_occurrences?: number | null;
+          adjust_business_day?: boolean;
+          status?: string;
+          created_at?: string;
+          updated_at?: string;
+          created_by?: string | null;
+          updated_by?: string | null;
         };
         Relationships: [];
       };
@@ -704,6 +824,7 @@ export type Database = {
           interest: number;
           penalty: number;
           discount: number;
+          addition: number;
           settlement_date: string;
           payment_method_id: string | null;
           notes: string | null;
@@ -720,6 +841,7 @@ export type Database = {
           interest?: number;
           penalty?: number;
           discount?: number;
+          addition?: number;
           settlement_date: string;
           payment_method_id?: string | null;
           notes?: string | null;
@@ -736,6 +858,7 @@ export type Database = {
           interest?: number;
           penalty?: number;
           discount?: number;
+          addition?: number;
           settlement_date?: string;
           payment_method_id?: string | null;
           notes?: string | null;
@@ -887,10 +1010,46 @@ export type Database = {
           p_entry_id: string;
           p_bank_account_id: string;
           p_settlement_date: string;
+          p_amount?: number | null;
+          p_interest?: number;
+          p_penalty?: number;
+          p_discount?: number;
+          p_addition?: number;
           p_payment_method_id?: string | null;
           p_notes?: string | null;
         };
         Returns: string;
+      };
+      reverse_settlement: {
+        Args: { p_settlement_id: string; p_reason?: string | null };
+        Returns: undefined;
+      };
+      create_installment_plan: {
+        Args: {
+          p_type: string;
+          p_description: string;
+          p_counterparty_id?: string | null;
+          p_category_id: string;
+          p_subcategory_id?: string | null;
+          p_cost_center_id?: string | null;
+          p_bank_account_id?: string | null;
+          p_payment_method_id?: string | null;
+          p_total_amount: number;
+          p_installments_count: number;
+          p_first_due_date: string;
+          p_recognition_strategy?: string;
+          p_document_number?: string | null;
+          p_notes?: string | null;
+        };
+        Returns: string;
+      };
+      generate_recurring_instances: {
+        Args: { p_rule_id: string; p_months_ahead?: number };
+        Returns: number;
+      };
+      cancel_recurring_occurrences: {
+        Args: { p_rule_id: string; p_scope: string; p_from_entry_id?: string | null };
+        Returns: number;
       };
       cancel_entry: {
         Args: { p_entry_id: string; p_reason?: string | null };

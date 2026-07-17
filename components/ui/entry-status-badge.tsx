@@ -1,5 +1,6 @@
 import { cn } from "@/lib/cn";
 import { ENTRY_STATUS_LABELS, ENTRY_STATUS_COLORS } from "@/lib/labels/lancamentos";
+import { getEffectiveStatus } from "@/lib/finance/status";
 
 const COLOR_CLASSES = {
   positive: "bg-signal-positiveSoft text-signal-positive",
@@ -8,8 +9,9 @@ const COLOR_CLASSES = {
   neutral: "bg-base-bg text-ink-faint",
 };
 
-export function EntryStatusBadge({ status }: { status: string }) {
-  const color = ENTRY_STATUS_COLORS[status] ?? "neutral";
+export function EntryStatusBadge({ status, dueDate }: { status: string; dueDate?: string }) {
+  const effectiveStatus = dueDate ? getEffectiveStatus(status, dueDate) : status;
+  const color = ENTRY_STATUS_COLORS[effectiveStatus] ?? "neutral";
   return (
     <span
       className={cn(
@@ -17,7 +19,7 @@ export function EntryStatusBadge({ status }: { status: string }) {
         COLOR_CLASSES[color]
       )}
     >
-      {ENTRY_STATUS_LABELS[status] ?? status}
+      {ENTRY_STATUS_LABELS[effectiveStatus] ?? effectiveStatus}
     </span>
   );
 }

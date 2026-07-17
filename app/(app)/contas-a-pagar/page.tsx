@@ -7,6 +7,8 @@ import { EntryFilters } from "@/components/lancamentos/entry-filters";
 import { EntriesTable } from "@/components/lancamentos/entries-table";
 import { EntryTotals } from "@/components/lancamentos/entry-totals";
 
+const OPEN_STATUSES = ["em_aberto", "agendado", "parcialmente_pago"];
+
 export default async function ContasAPagarPage({
   searchParams,
 }: {
@@ -14,6 +16,7 @@ export default async function ContasAPagarPage({
 }) {
   const supabase = createClient();
   const canCreate = await hasPermission("criar_lancamentos");
+  const today = new Date().toISOString().slice(0, 10);
 
   let query = supabase
     .from("financial_entries")
@@ -26,7 +29,9 @@ export default async function ContasAPagarPage({
   if (searchParams.q) {
     query = query.ilike("description", `%${searchParams.q}%`);
   }
-  if (searchParams.status) {
+  if (searchParams.status === "vencido") {
+    query = query.in("status", OPEN_STATUSES).lt("due_date", today);
+  } else if (searchParams.status) {
     query = query.eq("status", searchParams.status);
   }
 
@@ -34,14 +39,17 @@ export default async function ContasAPagarPage({
 
   const { data: totalsData } = await supabase
     .from("financial_entries")
-    .select("original_amount, status")
+    .select("original_amount, status, due_date")
     .eq("type", "despesa");
 
   const openTotal = (totalsData ?? [])
-    .filter((e) => e.status === "em_aberto" || e.status === "agendado")
+    .filter((e) => e.status === "em_aberto" || e.status === "agendado" || e.status === "parcialmente_pago")
     .reduce((sum, e) => sum + Number(e.original_amount), 0);
   const paidTotal = (totalsData ?? [])
     .filter((e) => e.status === "pago")
+    .reduce((sum, e) => sum + Number(e.original_amount), 0);
+  const overdueTotal = (totalsData ?? [])
+    .filter((e) => OPEN_STATUSES.includes(e.status) && e.due_date < today)
     .reduce((sum, e) => sum + Number(e.original_amount), 0);
 
   return (
@@ -58,7 +66,7 @@ export default async function ContasAPagarPage({
         )}
       </div>
 
-      <EntryTotals openTotal={openTotal} settledTotal={paidTotal} settledLabel="Total pago" />
+      <EntryTotals openTotal={openTotal} settledTotal={paidTotal} settledLabel="Total pago" overdueTotal={overdueTotal} />
 
       <Card>
         <EntryFilters type="despesa" />

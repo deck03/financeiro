@@ -44,6 +44,7 @@ Você tem duas opções.
    4. `supabase/seed_fase2.sql` (Fase 2 — plano de contas sugerido, centros de custo, contas C6, contrapartes dos agregadores e formas de pagamento)
    5. `supabase/migrations/0003_lancamentos_basicos.sql` (Fase 3 — contas a pagar/receber, liquidações, anexos)
    6. `supabase/migrations/0004_saldos_transferencias_fluxo.sql` (Fase 4 — saldos calculados, transferências, fluxo de caixa realizado)
+   7. `supabase/migrations/0005_lancamentos_avancados.sql` (Fase 5 — pagamento/recebimento parcial, estorno, parcelamento, recorrência)
 
 ### Opção B — pela Supabase CLI (recomendado a partir de várias migrations)
 
@@ -556,5 +557,137 @@ a conferência de saldo reaproveita a permissão `alterar_contas_bancarias` (dec
 **Fase 5 — Contas a pagar e receber avançadas**: pagamento e recebimento parcial, juros,
 multas, descontos, acréscimos, parcelamento, recorrência, agendamento, estorno, identificação
 de vencidos, ações em lote, modelos de lançamentos.
+
+Não inicie esta fase automaticamente — aguarde autorização.
+
+---
+
+# Fase 5 — Contas a pagar e receber avançadas
+
+## O que foi entregue
+
+### Funcionalidades implementadas
+- Pagamento e recebimento **parcial**, com opção de incluir juros, multa, desconto e acréscimo
+  em cada liquidação
+- **Estorno** de uma liquidação específica (o lançamento volta a "em aberto" ou "parcialmente
+  liquidado", conforme o que restar)
+- **Parcelamento**: cria várias parcelas vinculadas de uma vez, com ajuste de arredondamento
+  concentrado na última parcela e escolha de reconhecimento gerencial (competência original,
+  por parcela, ou conforme pagamento)
+- **Recorrência**: cria uma regra e já gera as ocorrências dos próximos 12 meses; permite gerar
+  mais ocorrências sob demanda e cancelar por escopo (só uma ocorrência, esta e as futuras, ou
+  toda a recorrência)
+- **Identificação de vencidos**: lançamentos em aberto (ou parcialmente liquidados) com
+  vencimento no passado aparecem como "Vencido" em toda a interface — calculado na hora, nunca
+  armazenado
+- Novo filtro "Vencido" e indicador "Total vencido" nas listas de contas a pagar/receber
+
+### Telas criadas
+- `/recorrencias` (lista de regras, geração de ocorrências, cancelamento por escopo)
+
+### Telas alteradas
+- `/contas-a-pagar/nova` e `/contas-a-receber/nova`: agora têm três abas — Lançamento único,
+  Parcelado e Recorrente
+- Detalhe do lançamento (`/contas-a-pagar/[id]` e `/contas-a-receber/[id]`): liquidação parcial
+  com encargos, estorno por liquidação, saldo restante, informações de parcelamento (com link
+  para as parcelas irmãs) e de recorrência
+
+### Banco de dados
+**Migration:** `supabase/migrations/0005_lancamentos_avancados.sql`
+
+**Tabelas criadas:** `installment_groups`, `recurring_rules`
+**Colunas adicionadas:** `financial_settlements.addition`; `financial_entries.installment_group_id`,
+`installment_number`, `installment_total`, `recurring_rule_id`
+
+**Funções SQL criadas/atualizadas:**
+- `entry_remaining_balance(entry_id)` — **atualizada** para considerar juros/multa/acréscimo
+  (aumentam o saldo em aberto) e desconto (reduz sem mover caixa)
+- `settle_entry(...)` — **reescrita** para aceitar valor parcial e encargos; escolhe
+  automaticamente entre "pago"/"parcialmente pago" (ou os equivalentes de receita) conforme o
+  que restar
+- `reverse_settlement(...)` — estorna uma liquidação e recalcula o status do lançamento
+- `create_installment_plan(...)` — cria o grupo de parcelas e as N parcelas de uma vez, em uma
+  única transação (nunca fica parcelamento pela metade)
+- `generate_recurring_instances(...)` — gera ocorrências futuras (até 12 meses), sempre
+  continuando da última já gerada — nunca duplica
+- `cancel_recurring_occurrences(...)` — cancela por escopo (uma / futuras / toda)
+
+**Permissões usadas:** todas já existiam desde a Fase 1 (`pagamentos_parciais`,
+`recebimentos_parciais`, `criar_lancamentos`, `cancelar_lancamentos`) — nenhuma nova permissão
+foi criada.
+
+### Decisões tomadas nesta fase
+- **Estorno reaproveita a permissão `cancelar_lancamentos`** em vez de criar uma permissão
+  nova — como só o administrador tem essa permissão por padrão, o comportamento already reflete
+  a intenção do escopo original (seção 7.1: "Estornar lançamentos" é uma capacidade do
+  administrador).
+- **Recorrência gera no máximo 12 meses de cada vez**, sempre sob comando explícito (ao criar a
+  regra, e depois manualmente pela tela de Recorrências) — evita gerar milhares de lançamentos
+  futuros desnecessários, como o próprio escopo pede na seção 15. Não há agendamento automático
+  (cron) rodando isso sozinho ainda; isso fica mais natural quando a Fase 11 trouxer a
+  infraestrutura de rotinas agendadas para os relatórios automáticos.
+- **Editar um lançamento gerado por recorrência individualmente não está disponível nesta
+  fase** — o controle de escopo foi implementado para *cancelamento* (uma / futuras / toda),
+  que é a operação mais crítica de acertar; edição de campos (valor, categoria, etc.) por
+  ocorrência pode ser adicionada depois sem exigir mudança de schema.
+- **Ações em lote e modelos de lançamento foram deixados de fora desta fase** — são melhorias
+  de produtividade operacional que não afetam a integridade dos números, e a fase já reunia
+  parcelamento, recorrência, liquidação parcial e estorno de uma vez.
+- **"Vencido" continua sendo calculado, nunca armazenado** (decisão original da Fase 0),
+  centralizado em uma única função TypeScript (`getEffectiveStatus`) usada por toda a interface,
+  para nunca haver divergência entre telas sobre o que conta como vencido.
+
+## Como testar
+
+1. Rode a migration `0005_lancamentos_avancados.sql` (seção 3 acima).
+2. Abra uma conta a pagar em aberto e registre um **pagamento parcial** (marque a caixinha
+   "Liquidar apenas parte do valor") — confirme que o status muda para "Parcialmente pago" e
+   que o saldo restante exibido está correto.
+3. Registre o restante — o status deve virar "Pago".
+4. Em uma nova conta a pagar, registre o pagamento incluindo **juros e multa** — confirme que
+   o valor que sai da conta bancária (no extrato, Fase 4) é maior que o valor original do
+   lançamento, refletindo os encargos.
+5. No histórico de liquidações de um lançamento pago, clique em **Estornar** em uma liquidação —
+   confirme que o status do lançamento volta para "Em aberto" (ou "Parcialmente pago", se havia
+   mais de uma liquidação).
+6. Crie uma **conta a pagar parcelada** em 3x — confirme que aparecem 3 lançamentos separados,
+   cada um com "Parcela X de 3" e links entre eles.
+7. Crie uma **recorrência mensal** — confirme que várias ocorrências futuras já aparecem em
+   **Contas a pagar** (ou a receber) imediatamente após criar.
+8. Na tela de **Recorrências**, cancele "esta e as próximas" a partir de uma ocorrência
+   específica — confirme que só as ocorrências anteriores àquela data continuam em aberto.
+9. Crie um lançamento com vencimento no passado e deixe em aberto — confirme que ele aparece
+   como "Vencido" na lista e no filtro "Total vencido".
+
+## Critérios de aceite
+
+✅ Saldo restante é calculado corretamente (considera principal, juros, multa, desconto e
+   acréscimo de todas as liquidações válidas)
+✅ Estorno recompõe corretamente os valores (a liquidação estornada sai do cálculo, e o status
+   do lançamento é recalculado a partir do que sobrou)
+✅ Parcelas não são duplicadas (todas as parcelas de um plano são criadas em uma única
+   transação/chamada)
+✅ Recorrências são geradas corretamente (sempre continuam da última ocorrência já existente,
+   nunca reiniciam do começo)
+✅ Alterações de recorrência respeitam o escopo selecionado (cancelamento por uma ocorrência,
+   futuras, ou toda a regra)
+
+## Pendências desta fase
+
+- Ações em lote (selecionar vários lançamentos e agir de uma vez) — deixadas de fora,
+  conforme decisão acima.
+- Modelos de lançamento (salvar um lançamento como modelo reutilizável) — deixados de fora,
+  conforme decisão acima.
+- Edição de campos (valor, categoria, etc.) de uma ocorrência recorrente já gerada — só
+  cancelamento está disponível nesta fase.
+- Sem geração automática/agendada de novas ocorrências de recorrência — precisa visitar a tela
+  de Recorrências e clicar em "Gerar próximas ocorrências" de tempos em tempos, até a Fase 11
+  trazer rotinas agendadas.
+
+## Próxima fase sugerida
+
+**Fase 6 — Fluxo de caixa projetado**: projeção de caixa considerando contas a receber/pagar
+em aberto, agendadas, vencidas e recorrências futuras; projeções de 7/15/30/60/90 dias; menor
+saldo projetado e data; drill-down até os lançamentos de origem.
 
 Não inicie esta fase automaticamente — aguarde autorização.

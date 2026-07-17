@@ -7,7 +7,7 @@ import { Select } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { ENTRY_STATUS_LABELS } from "@/lib/labels/lancamentos";
 
-const RELEVANT_STATUSES = ["em_aberto", "agendado", "pago", "recebido", "cancelado"];
+const RELEVANT_STATUSES = ["em_aberto", "agendado", "vencido", "parcialmente_pago", "parcialmente_recebido", "pago", "recebido", "cancelado"];
 
 export function EntryFilters({ type }: { type: "receita" | "despesa" }) {
   const router = useRouter();

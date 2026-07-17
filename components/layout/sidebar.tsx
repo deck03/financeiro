@@ -13,6 +13,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: "Fluxo de caixa projetado", href: "/fluxo-de-caixa/projetado", disabled: true },
   { label: "Contas a pagar", href: "/contas-a-pagar" },
   { label: "Contas a receber", href: "/contas-a-receber" },
+  { label: "Recorrências", href: "/recorrencias" },
   { label: "Transferências", href: "/transferencias" },
   { label: "DRE gerencial", href: "/dre", disabled: true },
 ];

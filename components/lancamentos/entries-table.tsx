@@ -44,7 +44,7 @@ export function EntriesTable({
               <td className="py-2 pr-4 text-ink-soft">{formatDate(e.due_date)}</td>
               <td className="num py-2 pr-4 text-ink">{formatCurrency(e.original_amount)}</td>
               <td className="py-2 pr-4">
-                <EntryStatusBadge status={e.status} />
+                <EntryStatusBadge status={e.status} dueDate={e.due_date} />
               </td>
             </tr>
           ))}

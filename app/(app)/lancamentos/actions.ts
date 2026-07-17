@@ -2,7 +2,15 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { requirePermission } from "@/lib/permissions";
-import { entrySchema, settleSchema, cancelSchema } from "@/lib/validation/lancamentos";
+import {
+  entrySchema,
+  settleSchema,
+  cancelSchema,
+  reverseSettlementSchema,
+  installmentPlanSchema,
+  recurringRuleSchema,
+  cancelRecurringSchema,
+} from "@/lib/validation/lancamentos";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
@@ -123,7 +131,7 @@ export async function createEntryAction(_prev: FormState, formData: FormData): P
 }
 
 // ---------------------------------------------------------------------------
-// Liquidar (pagar/receber) um lançamento — valor integral (Fase 3).
+// Liquidar (pagar/receber) um lançamento — integral ou parcial, com encargos.
 // ---------------------------------------------------------------------------
 export async function settleEntryFormAction(_prev: FormState, formData: FormData): Promise<FormState> {
   const parsed = settleSchema.safeParse({
@@ -132,6 +140,11 @@ export async function settleEntryFormAction(_prev: FormState, formData: FormData
     settlement_date: formData.get("settlement_date"),
     payment_method_id: formData.get("payment_method_id"),
     notes: formData.get("notes"),
+    amount: formData.get("amount") || "",
+    interest: formData.get("interest") || "0",
+    penalty: formData.get("penalty") || "0",
+    discount: formData.get("discount") || "0",
+    addition: formData.get("addition") || "0",
   });
 
   if (!parsed.success) {
@@ -143,12 +156,51 @@ export async function settleEntryFormAction(_prev: FormState, formData: FormData
     p_entry_id: parsed.data.entry_id,
     p_bank_account_id: parsed.data.bank_account_id,
     p_settlement_date: parsed.data.settlement_date,
+    p_amount: parsed.data.amount && parsed.data.amount !== "" ? Number(parsed.data.amount) : null,
+    p_interest: parsed.data.interest ?? 0,
+    p_penalty: parsed.data.penalty ?? 0,
+    p_discount: parsed.data.discount ?? 0,
+    p_addition: parsed.data.addition ?? 0,
     p_payment_method_id: emptyToNull(parsed.data.payment_method_id),
     p_notes: emptyToNull(parsed.data.notes),
   });
 
   if (error) {
-    return { error: error.message.includes("Sem permissão") ? "Você não tem permissão para esta ação." : "Não foi possível registrar a liquidação." };
+    return {
+      error: error.message.includes("permissão")
+        ? "Você não tem permissão para esta ação."
+        : error.message.includes("maior que o saldo")
+          ? error.message
+          : "Não foi possível registrar a liquidação.",
+    };
+  }
+
+  revalidatePath("/contas-a-pagar");
+  revalidatePath("/contas-a-receber");
+  return { success: true };
+}
+
+// ---------------------------------------------------------------------------
+// Estornar uma liquidação específica.
+// ---------------------------------------------------------------------------
+export async function reverseSettlementFormAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  const parsed = reverseSettlementSchema.safeParse({
+    settlement_id: formData.get("settlement_id"),
+    reason: formData.get("reason"),
+  });
+
+  if (!parsed.success) {
+    return { error: "Dados inválidos." };
+  }
+
+  const { supabase } = await getOrgIdAndUser();
+  const { error } = await supabase.rpc("reverse_settlement", {
+    p_settlement_id: parsed.data.settlement_id,
+    p_reason: emptyToNull(parsed.data.reason),
+  });
+
+  if (error) {
+    return { error: error.message.includes("permissão") ? "Você não tem permissão para esta ação." : error.message };
   }
 
   revalidatePath("/contas-a-pagar");
@@ -179,6 +231,175 @@ export async function cancelEntryFormAction(_prev: FormState, formData: FormData
     return { error: error.message.includes("Sem permissão") ? "Você não tem permissão para esta ação." : error.message };
   }
 
+  revalidatePath("/contas-a-pagar");
+  revalidatePath("/contas-a-receber");
+  return { success: true };
+}
+
+// ---------------------------------------------------------------------------
+// Criar parcelamento (N lançamentos vinculados).
+// ---------------------------------------------------------------------------
+export async function createInstallmentPlanAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  try {
+    await requirePermission("criar_lancamentos");
+  } catch {
+    return { error: "Você não tem permissão para criar lançamentos." };
+  }
+
+  const parsed = installmentPlanSchema.safeParse({
+    type: formData.get("type"),
+    description: formData.get("description"),
+    counterparty_id: formData.get("counterparty_id"),
+    category_id: formData.get("category_id"),
+    subcategory_id: formData.get("subcategory_id"),
+    cost_center_id: formData.get("cost_center_id"),
+    bank_account_id: formData.get("bank_account_id"),
+    payment_method_id: formData.get("payment_method_id"),
+    total_amount: formData.get("total_amount"),
+    installments_count: formData.get("installments_count"),
+    first_due_date: formData.get("first_due_date"),
+    recognition_strategy: formData.get("recognition_strategy"),
+    document_number: formData.get("document_number"),
+    notes: formData.get("notes"),
+  });
+
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
+  }
+
+  const data = parsed.data;
+  const { supabase } = await getOrgIdAndUser();
+
+  const { error } = await supabase.rpc("create_installment_plan", {
+    p_type: data.type,
+    p_description: data.description,
+    p_counterparty_id: emptyToNull(data.counterparty_id),
+    p_category_id: data.category_id,
+    p_subcategory_id: emptyToNull(data.subcategory_id),
+    p_cost_center_id: emptyToNull(data.cost_center_id),
+    p_bank_account_id: emptyToNull(data.bank_account_id),
+    p_payment_method_id: emptyToNull(data.payment_method_id),
+    p_total_amount: data.total_amount,
+    p_installments_count: data.installments_count,
+    p_first_due_date: data.first_due_date,
+    p_recognition_strategy: data.recognition_strategy,
+    p_document_number: emptyToNull(data.document_number),
+    p_notes: emptyToNull(data.notes),
+  });
+
+  if (error) {
+    return { error: "Não foi possível criar o parcelamento." };
+  }
+
+  revalidatePath(data.type === "despesa" ? "/contas-a-pagar" : "/contas-a-receber");
+  redirect(data.type === "despesa" ? "/contas-a-pagar" : "/contas-a-receber");
+}
+
+// ---------------------------------------------------------------------------
+// Criar recorrência (gera imediatamente as ocorrências dos próximos 12 meses).
+// ---------------------------------------------------------------------------
+export async function createRecurringRuleAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  try {
+    await requirePermission("criar_lancamentos");
+  } catch {
+    return { error: "Você não tem permissão para criar lançamentos." };
+  }
+
+  const parsed = recurringRuleSchema.safeParse({
+    type: formData.get("type"),
+    description: formData.get("description"),
+    counterparty_id: formData.get("counterparty_id"),
+    category_id: formData.get("category_id"),
+    subcategory_id: formData.get("subcategory_id"),
+    cost_center_id: formData.get("cost_center_id"),
+    bank_account_id: formData.get("bank_account_id"),
+    payment_method_id: formData.get("payment_method_id"),
+    amount: formData.get("amount"),
+    frequency: formData.get("frequency"),
+    interval_count: formData.get("interval_count") || "1",
+    start_date: formData.get("start_date"),
+    end_date: formData.get("end_date"),
+    max_occurrences: formData.get("max_occurrences") || "",
+    adjust_business_day: formData.get("adjust_business_day") === "on",
+  });
+
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
+  }
+
+  const data = parsed.data;
+  const { supabase, userId, organizationId } = await getOrgIdAndUser();
+
+  const { data: rule, error } = await supabase
+    .from("recurring_rules")
+    .insert({
+      organization_id: organizationId,
+      type: data.type,
+      description: data.description,
+      counterparty_id: emptyToNull(data.counterparty_id),
+      category_id: data.category_id,
+      subcategory_id: emptyToNull(data.subcategory_id),
+      cost_center_id: emptyToNull(data.cost_center_id),
+      bank_account_id: emptyToNull(data.bank_account_id),
+      payment_method_id: emptyToNull(data.payment_method_id),
+      amount: data.amount,
+      frequency: data.frequency,
+      interval_count: data.interval_count,
+      start_date: data.start_date,
+      end_date: emptyToNull(data.end_date),
+      max_occurrences: data.max_occurrences && data.max_occurrences !== "" ? Number(data.max_occurrences) : null,
+      adjust_business_day: data.adjust_business_day ?? false,
+      created_by: userId,
+      updated_by: userId,
+    })
+    .select("id")
+    .single();
+
+  if (error || !rule) {
+    return { error: "Não foi possível criar a recorrência." };
+  }
+
+  await supabase.rpc("generate_recurring_instances", { p_rule_id: rule.id, p_months_ahead: 12 });
+
+  revalidatePath("/recorrencias");
+  redirect("/recorrencias");
+}
+
+// ---------------------------------------------------------------------------
+// Gerar mais ocorrências de uma recorrência já existente.
+// ---------------------------------------------------------------------------
+export async function generateMoreOccurrencesAction(ruleId: string) {
+  const { supabase } = await getOrgIdAndUser();
+  await supabase.rpc("generate_recurring_instances", { p_rule_id: ruleId, p_months_ahead: 12 });
+  revalidatePath("/recorrencias");
+}
+
+// ---------------------------------------------------------------------------
+// Cancelar ocorrências de uma recorrência, por escopo.
+// ---------------------------------------------------------------------------
+export async function cancelRecurringFormAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  const parsed = cancelRecurringSchema.safeParse({
+    rule_id: formData.get("rule_id"),
+    scope: formData.get("scope"),
+    from_entry_id: formData.get("from_entry_id"),
+  });
+
+  if (!parsed.success) {
+    return { error: "Dados inválidos." };
+  }
+
+  const { supabase } = await getOrgIdAndUser();
+  const { error } = await supabase.rpc("cancel_recurring_occurrences", {
+    p_rule_id: parsed.data.rule_id,
+    p_scope: parsed.data.scope,
+    p_from_entry_id: emptyToNull(parsed.data.from_entry_id),
+  });
+
+  if (error) {
+    return { error: error.message.includes("permissão") ? "Você não tem permissão para esta ação." : error.message };
+  }
+
+  revalidatePath("/recorrencias");
   revalidatePath("/contas-a-pagar");
   revalidatePath("/contas-a-receber");
   return { success: true };

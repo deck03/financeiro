@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { Card } from "@/components/ui/card";
-import { EntryForm } from "@/components/lancamentos/entry-form";
+import { EntryFormTabs } from "@/components/lancamentos/entry-form-tabs";
 
 export default async function NovaContaAPagarPage() {
   const supabase = createClient();
@@ -40,7 +40,7 @@ export default async function NovaContaAPagarPage() {
       </div>
 
       <Card>
-        <EntryForm
+        <EntryFormTabs
           type="despesa"
           categories={categories ?? []}
           subcategories={subcategories ?? []}
