@@ -982,6 +982,144 @@ export type Database = {
         };
         Relationships: [];
       };
+      import_batches: {
+        Row: {
+          id: string;
+          organization_id: string;
+          bank_account_id: string;
+          file_name: string;
+          total_transactions: number;
+          imported_count: number;
+          duplicate_count: number;
+          ignored_count: number;
+          created_at: string;
+          created_by: string | null;
+        };
+        Insert: {
+          id?: string;
+          organization_id: string;
+          bank_account_id: string;
+          file_name: string;
+          total_transactions?: number;
+          imported_count?: number;
+          duplicate_count?: number;
+          ignored_count?: number;
+          created_at?: string;
+          created_by?: string | null;
+        };
+        Update: {
+          id?: string;
+          organization_id?: string;
+          bank_account_id?: string;
+          file_name?: string;
+          total_transactions?: number;
+          imported_count?: number;
+          duplicate_count?: number;
+          ignored_count?: number;
+          created_at?: string;
+          created_by?: string | null;
+        };
+        Relationships: [];
+      };
+      import_errors: {
+        Row: {
+          id: string;
+          organization_id: string;
+          import_batch_id: string;
+          message: string;
+          raw_data: Json | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          organization_id: string;
+          import_batch_id: string;
+          message: string;
+          raw_data?: Json | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          organization_id?: string;
+          import_batch_id?: string;
+          message?: string;
+          raw_data?: Json | null;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      bank_transactions: {
+        Row: {
+          id: string;
+          organization_id: string;
+          bank_account_id: string;
+          import_batch_id: string | null;
+          ofx_transaction_id: string | null;
+          transaction_hash: string;
+          transaction_date: string;
+          amount: number;
+          description: string;
+          status: string;
+          created_at: string;
+          created_by: string | null;
+        };
+        Insert: {
+          id?: string;
+          organization_id: string;
+          bank_account_id: string;
+          import_batch_id?: string | null;
+          ofx_transaction_id?: string | null;
+          transaction_hash: string;
+          transaction_date: string;
+          amount: number;
+          description?: string;
+          status?: string;
+          created_at?: string;
+          created_by?: string | null;
+        };
+        Update: {
+          id?: string;
+          organization_id?: string;
+          bank_account_id?: string;
+          import_batch_id?: string | null;
+          ofx_transaction_id?: string | null;
+          transaction_hash?: string;
+          transaction_date?: string;
+          amount?: number;
+          description?: string;
+          status?: string;
+          created_at?: string;
+          created_by?: string | null;
+        };
+        Relationships: [];
+      };
+      reconciliation_links: {
+        Row: {
+          id: string;
+          organization_id: string;
+          bank_transaction_id: string;
+          settlement_id: string;
+          created_at: string;
+          created_by: string | null;
+        };
+        Insert: {
+          id?: string;
+          organization_id: string;
+          bank_transaction_id: string;
+          settlement_id: string;
+          created_at?: string;
+          created_by?: string | null;
+        };
+        Update: {
+          id?: string;
+          organization_id?: string;
+          bank_transaction_id?: string;
+          settlement_id?: string;
+          created_at?: string;
+          created_by?: string | null;
+        };
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: {
@@ -1069,6 +1207,41 @@ export type Database = {
           p_notes?: string | null;
         };
         Returns: string;
+      };
+      reconcile_with_existing_entry: {
+        Args: {
+          p_bank_transaction_id: string;
+          p_entry_id: string;
+          p_amount?: number | null;
+          p_payment_method_id?: string | null;
+        };
+        Returns: string;
+      };
+      reconcile_with_new_entry: {
+        Args: {
+          p_bank_transaction_id: string;
+          p_category_id: string;
+          p_description?: string | null;
+          p_counterparty_id?: string | null;
+          p_subcategory_id?: string | null;
+          p_cost_center_id?: string | null;
+          p_payment_method_id?: string | null;
+          p_document_number?: string | null;
+          p_notes?: string | null;
+        };
+        Returns: string;
+      };
+      undo_reconciliation: {
+        Args: { p_bank_transaction_id: string };
+        Returns: undefined;
+      };
+      ignore_bank_transaction: {
+        Args: { p_bank_transaction_id: string };
+        Returns: undefined;
+      };
+      unignore_bank_transaction: {
+        Args: { p_bank_transaction_id: string };
+        Returns: undefined;
       };
     };
     Enums: Record<string, never>;

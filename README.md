@@ -45,6 +45,7 @@ Você tem duas opções.
    5. `supabase/migrations/0003_lancamentos_basicos.sql` (Fase 3 — contas a pagar/receber, liquidações, anexos)
    6. `supabase/migrations/0004_saldos_transferencias_fluxo.sql` (Fase 4 — saldos calculados, transferências, fluxo de caixa realizado)
    7. `supabase/migrations/0005_lancamentos_avancados.sql` (Fase 5 — pagamento/recebimento parcial, estorno, parcelamento, recorrência)
+   8. `supabase/migrations/0006_ofx_conciliacao.sql` (Fase 9 — importação OFX e conciliação bancária)
 
 ### Opção B — pela Supabase CLI (recomendado a partir de várias migrations)
 
@@ -985,5 +986,113 @@ liquidações da Fase 3/5 — não foi preciso mudar nada no banco.
 **Fase 9 — Importação OFX e conciliação**: upload de OFX (inicialmente C6 Bank),
 pré-visualização, deduplicação, criação de lançamento a partir da transação bancária,
 vinculação com lançamento existente, conciliação manual, desfazer conciliação.
+
+Não inicie esta fase automaticamente — aguarde autorização.
+
+---
+
+# Fase 9 — Importação OFX e conciliação
+
+## O que foi entregue
+
+### Funcionalidades implementadas
+- **Importação de OFX** em `/importacao-ofx`: upload do extrato, leitura no navegador (nenhum
+  arquivo é enviado a serviços externos), pré-visualização de cada transação antes de importar
+- **Deduplicação real**: cada transação é identificada pelo FITID do OFX quando disponível
+  (ou por um hash de conta+data+valor+descrição como alternativa); o banco tem um índice único
+  que impede duplicidade mesmo que a mesma transação apareça em dois arquivos diferentes
+- **Conciliação manual** em `/conciliacao`: para cada transação não conciliada, é possível
+  vincular a um lançamento em aberto já existente (com liquidação parcial se o valor não bater
+  exatamente, reaproveitando a Fase 5), criar um lançamento novo direto a partir da transação,
+  ou ignorar
+- **Desfazer conciliação**: reverte a liquidação (reaproveitando o estorno da Fase 5) e volta a
+  transação para "não conciliada"
+- Histórico de transações conciliadas e ignoradas, com opção de reativar uma transação ignorada
+
+### Telas criadas
+- `/importacao-ofx`
+- `/conciliacao`
+
+### Banco de dados
+**Migration:** `supabase/migrations/0006_ofx_conciliacao.sql`
+
+**Tabelas criadas:** `import_batches`, `import_errors`, `bank_transactions`, `reconciliation_links`
+
+**Índices únicos para deduplicação:** `(bank_account_id, ofx_transaction_id)` quando há FITID;
+`(bank_account_id, transaction_hash)` quando não há — essa é a garantia final contra
+duplicidade, no nível do banco, não só na tela.
+
+**Funções SQL criadas** (todas reaproveitando `settle_entry`/`reverse_settlement` da Fase 5 —
+nenhuma regra de liquidação foi duplicada):
+- `reconcile_with_existing_entry(...)` — vincula a transação a um lançamento existente
+- `reconcile_with_new_entry(...)` — cria o lançamento e concilia na mesma operação
+- `undo_reconciliation(...)` — estorna a liquidação vinculada e reabre a transação
+- `ignore_bank_transaction(...)` / `unignore_bank_transaction(...)`
+
+**Permissões usadas:** `importar_ofx` e `realizar_conciliacao` já existiam desde a Fase 1 —
+nenhuma nova permissão foi criada.
+
+### Decisões tomadas nesta fase
+- **Conciliação 1-para-1 nesta fase** — uma transação bancária vincula a um lançamento (e
+  vice-versa). O escopo original também prevê conciliar uma transação com vários lançamentos e
+  vários lançamentos com uma transação; isso fica para uma fase futura, se o uso real do
+  sistema mostrar essa necessidade. O modelo de dados (`reconciliation_links`) já é uma tabela
+  de ligação — dá para evoluir para muitos-para-muitos sem redesenhar do zero.
+- **Parser de OFX escrito do zero, sem biblioteca externa** — o formato OFX 1.x (SGML, sem
+  tags de fechamento) e OFX 2.x (XML) têm estruturas diferentes; o parser tenta os dois
+  formatos automaticamente. Foi testado com 5 cenários incluindo arquivos malformados.
+- **A leitura do arquivo acontece no navegador**, não no servidor — o arquivo OFX em si nunca é
+  armazenado; só as transações já extraídas (data, valor, descrição, identificador) chegam ao
+  Supabase.
+- **Comparação entre saldo calculado e extrato bancário reaproveita a "Conferência de saldo" da
+  Fase 4** em vez de criar uma tela nova — é exatamente a mesma necessidade, e duas telas
+  fazendo a mesma coisa só criaria risco de divergência.
+
+## Como testar
+
+1. Rode a migration `0006_ofx_conciliacao.sql` (seção 3 acima).
+2. Em **Contas bancárias**, confirme que a conta que você quer testar tem "Permitir importação
+   OFX" habilitado (se não tiver, edite — ou recrie a conta com essa opção marcada).
+3. Baixe um extrato OFX do seu banco (ou peça para eu gerar um arquivo de exemplo, se quiser
+   testar sem esperar o próximo extrato real).
+4. Acesse **Importação OFX**, selecione a conta, envie o arquivo — confirme que a
+   pré-visualização aparece com cada transação marcada como "Nova".
+5. Confirme a importação, vá para **Conciliação bancária** — as transações devem aparecer em
+   "Não conciliadas".
+6. Tente importar o **mesmo arquivo de novo** — na pré-visualização, todas as transações devem
+   aparecer como "Já importada" e vir desmarcadas.
+7. Em uma transação não conciliada, clique em "Vincular a lançamento" e escolha um lançamento
+   em aberto compatível — confirme que ela move para "Conciliadas" e que o lançamento aparece
+   como pago/recebido.
+8. Em outra transação, clique em "Criar lançamento" — preencha a categoria e confirme — deve
+   criar o lançamento já conciliado.
+9. Clique em "Desfazer conciliação" em uma transação conciliada — confirme que ela volta para
+   "Não conciliadas" e que o lançamento correspondente volta ao status anterior.
+10. Clique em "Ignorar" em uma transação — confirme que ela aparece na aba "Ignoradas", e que
+    "Reativar" a traz de volta.
+
+## Critérios de aceite
+
+✅ O mesmo arquivo não duplica transações (índice único no banco + pré-visualização avisando)
+✅ Transações importadas anteriormente são identificadas (marcadas como "Já importada" na
+   pré-visualização)
+✅ O usuário consegue desfazer uma conciliação
+✅ O saldo calculado pode ser comparado com o extrato (via Conferência de Saldo, Fase 4)
+
+## Pendências desta fase
+
+- Conciliação muitos-para-muitos não implementada (ver decisão acima).
+- O parser de OFX não foi validado contra um arquivo real do C6 Bank ainda — a estrutura segue
+  o padrão OFX genérico, que o C6 (como a maioria dos bancos brasileiros) segue, mas vale testar
+  com um arquivo real assim que possível e me avisar se algo não for reconhecido corretamente.
+- `import_errors` existe no banco mas a tela ainda não expõe os erros de importação
+  individualmente — hoje eles só aparecem de forma agregada (contagem de transações
+  ignoradas na pré-visualização). Pode ser refinado depois sem mudança de schema.
+
+## Próxima fase sugerida
+
+**Fase 10 — Recibos de aluguel**: dados dos locatários, configurações do emissor, numeração
+sequencial, geração de recibo em PDF, armazenamento privado, download, envio por e-mail,
+histórico.
 
 Não inicie esta fase automaticamente — aguarde autorização.
