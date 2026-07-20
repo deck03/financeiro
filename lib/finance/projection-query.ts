@@ -34,13 +34,18 @@ export type CashflowProjection = {
  * @param horizonEnd data final do horizonte, YYYY-MM-DD
  * @param strictAccountId se informado, restringe os lançamentos a essa
  *   conta específica (em vez de "conta em accountIds OU sem conta definida")
+ * @param organizationId use apenas quando chamado fora de uma sessão de
+ *   usuário autenticado (ex.: rotina agendada usando o cliente admin, que
+ *   ignora Row Level Security) — nesse caso o filtro precisa ser explícito
+ *   em vez de depender da RLS.
  */
 export async function computeCashflowProjection(
   supabase: any,
   accountIds: string[],
   today: string,
   horizonEnd: string,
-  strictAccountId?: string
+  strictAccountId?: string,
+  organizationId?: string
 ): Promise<CashflowProjection> {
   const currentBalanceResults = await Promise.all(
     accountIds.map((id) => supabase.rpc("bank_account_balance", { p_account_id: id }))
@@ -50,20 +55,24 @@ export async function computeCashflowProjection(
   let openEntries: any[] = [];
 
   if (strictAccountId) {
-    const { data } = await supabase
+    let query = supabase
       .from("financial_entries")
       .select("id, type, description, original_amount, due_date, bank_account_id")
       .in("status", OPEN_STATUSES)
       .lte("due_date", horizonEnd)
       .eq("bank_account_id", strictAccountId);
+    if (organizationId) query = query.eq("organization_id", organizationId);
+    const { data } = await query;
     openEntries = data ?? [];
   } else if (accountIds.length > 0) {
-    const { data } = await supabase
+    let query = supabase
       .from("financial_entries")
       .select("id, type, description, original_amount, due_date, bank_account_id")
       .in("status", OPEN_STATUSES)
       .lte("due_date", horizonEnd)
       .or(`bank_account_id.in.(${accountIds.join(",")}),bank_account_id.is.null`);
+    if (organizationId) query = query.eq("organization_id", organizationId);
+    const { data } = await query;
     openEntries = data ?? [];
   }
 

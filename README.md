@@ -47,6 +47,7 @@ Você tem duas opções.
    7. `supabase/migrations/0005_lancamentos_avancados.sql` (Fase 5 — pagamento/recebimento parcial, estorno, parcelamento, recorrência)
    8. `supabase/migrations/0006_ofx_conciliacao.sql` (Fase 9 — importação OFX e conciliação bancária)
    9. `supabase/migrations/0007_recibos_aluguel.sql` (Fase 10 — recibos de aluguel)
+   10. `supabase/migrations/0008_relatorios_automaticos.sql` (Fase 11 — relatórios automáticos)
 
 ### Opção B — pela Supabase CLI (recomendado a partir de várias migrations)
 
@@ -1205,5 +1206,133 @@ Fase 0).
 qualidade dos dados) e mensal (para o CEO), configuração de destinatários e horário, histórico
 de envios, reenvio manual — e é aqui que o provedor de e-mail finalmente entra, permitindo
 também o envio de recibos por e-mail.
+
+Não inicie esta fase automaticamente — aguarde autorização.
+
+---
+
+# Fase 11 — Relatórios automáticos
+
+## O que foi entregue
+
+### Funcionalidades implementadas
+- **Relatório semanal**: saldo empresarial, saldo por conta, saldo pessoal separado, caixa
+  projetado (7/30/60/90 dias), entradas/saídas previstas para os próximos 7 dias, alertas
+  (contas vencidas, transações não conciliadas, lançamentos sem conta bancária, diferenças de
+  saldo)
+- **Relatório mensal**: saldo inicial/final do mês anterior, geração de caixa, receita e
+  resultado operacional (mesma DRE da Fase 8), contas a pagar/receber, inadimplência, caixa
+  projetado, comparação com o mês anterior, maiores entradas/saídas, principais categorias
+- **Configuração pela interface**: destinatários (texto livre, um por linha), dia da
+  semana/mês, horário desejado, ativar/desativar — nada fixo no código
+- **Histórico de envios** com status (enviado/erro) e mensagem de erro visível
+- **Reenvio manual / "gerar agora"**: dispara o relatório imediatamente, sem esperar o
+  agendamento
+- **Rotina agendada real**, via Vercel Cron — não é só um botão manual
+
+### Telas criadas
+- `/relatorios`
+
+### Banco de dados
+**Migration:** `supabase/migrations/0008_relatorios_automaticos.sql`
+
+**Tabelas criadas:** `report_configs`, `generated_reports`
+
+**Permissão usada:** `alterar_configuracoes`, já existia desde a Fase 1.
+
+### Infraestrutura nova
+- **Camada de e-mail desacoplada** (`lib/email/`): uma interface `EmailProvider` com uma
+  implementação via Resend. Trocar de provedor no futuro é mudar uma linha em
+  `lib/email/index.ts`, sem tocar nos relatórios nem nos recibos.
+- **Rota agendada** `app/api/cron/send-reports/route.ts`, protegida por um segredo
+  (`CRON_SECRET`), chamada uma vez por dia pelo **Vercel Cron** (configurado em `vercel.json`).
+  Usa o cliente administrativo do Supabase (chave service role) porque roda sem nenhum usuário
+  logado.
+- Duas funções de cálculo já existentes (`computeCashflowProjection` e `fetchClassifiedItems`)
+  ganharam um parâmetro opcional de organização, usado só nesse contexto sem sessão — o
+  comportamento normal (autenticado, com RLS) não muda em nada.
+
+### Decisões tomadas nesta fase
+- **Granularidade do agendamento: uma vez por dia**, não por hora exata. O plano gratuito da
+  Vercel só permite cron diário. Você configura o horário desejado normalmente (fica salvo e
+  documentado), mas o disparo de verdade acontece no horário fixo do cron
+  (aproximadamente 8h de Brasília). Se isso incomodar no uso real, dá para resolver com o
+  plano Vercel Pro (cron mais flexível) sem mudar nada da lógica.
+- **Provedor de e-mail: Resend**, conforme já previsto desde a Fase 0. Requer conta e chave de
+  API — passo a passo abaixo.
+- **"Lançamento sem classificação" virou "lançamento sem conta bancária definida"** no alerta
+  do relatório semanal — como a categoria já é obrigatória em todo lançamento desde a Fase 3,
+  esse alerta específico do escopo original não tinha como ocorrer; troquei por uma checagem de
+  qualidade equivalente que realmente pode acontecer no sistema.
+- **Envio de recibos por e-mail (pendência da Fase 10) não foi conectado ainda** — a
+  infraestrutura de e-mail já existe agora; conectar o botão "Enviar recibo por e-mail" é uma
+  tarefa pequena que pode ser feita a qualquer momento, sem depender de mais nenhuma fase.
+
+## Passo a passo: configurar o Resend
+
+1. Crie uma conta em [resend.com](https://resend.com) (tem plano gratuito).
+2. No painel, vá em **API Keys** → **Create API Key** → copie a chave gerada.
+3. Em **Domains**, adicione e verifique um domínio seu (ex.: `deck03.com.br`) para poder
+   enviar de um endereço como `relatorios@deck03.com.br`. **Sem domínio verificado**, o Resend
+   só permite enviar para o e-mail da sua própria conta — funciona para testar, mas não para
+   uso real com o CEO/administrador.
+4. Na Vercel, vá em **Settings → Environment Variables** do projeto e adicione:
+   - `RESEND_API_KEY`: a chave copiada no passo 2
+   - `EMAIL_FROM`: o endereço remetente, ex.: `DECK 03 <relatorios@deck03.com.br>`
+5. Redeploy o projeto para as novas variáveis entrarem em vigor.
+
+## Passo a passo: confirmar o Vercel Cron
+
+1. Depois do deploy com o `vercel.json` desta fase, vá em **Settings → Environment Variables**
+   e adicione `CRON_SECRET` com um valor aleatório (ex.: gere uma senha longa qualquer).
+2. Vá em **Settings → Cron Jobs** no painel da Vercel — deve aparecer o job
+   `/api/cron/send-reports` agendado. Se não aparecer, faça um redeploy.
+3. Você pode testar manualmente: acesse
+   `https://SEU-DOMINIO.vercel.app/api/cron/send-reports` com um cabeçalho
+   `Authorization: Bearer SEU_CRON_SECRET` (ferramentas como Postman/Insomnia servem para isso)
+   para confirmar que a rota responde sem erro.
+
+## Como testar
+
+1. Rode a migration `0008_relatorios_automaticos.sql` (seção 3 acima).
+2. Configure o Resend e o `CRON_SECRET` (seções acima). Se ainda não tiver domínio verificado,
+   use seu próprio e-mail (o mesmo da conta Resend) como destinatário de teste.
+3. Acesse **Relatórios**, configure o relatório semanal com seu e-mail como destinatário e
+   clique em **Ativar envio automático** → **Salvar configuração**.
+4. Clique em **Gerar e enviar agora** — confirme que o e-mail chega (confira o spam também) com
+   os dados batendo com o Dashboard.
+5. Confira o **Histórico de envios** — deve aparecer uma linha "Enviado", origem "Manual".
+6. Tente enviar sem ter configurado o Resend (remova a chave temporariamente, se quiser testar)
+   — confirme que aparece "Erro" no histórico, com a mensagem visível ao passar o mouse.
+7. Repita os passos 3–5 para o relatório mensal.
+8. Desative o envio automático de um dos relatórios — confirme que o histórico não recebe
+   novas linhas automáticas dele (o "gerar agora" continua funcionando independente do
+   ativar/desativar, por ser manual).
+
+## Critérios de aceite
+
+✅ Relatórios utilizam os mesmos cálculos do dashboard (reaproveita `computeCashflowProjection`,
+   `buildDRE`, `fetchClassifiedItems` — as mesmas funções usadas em Dashboard, Fluxo de Caixa
+   Projetado e DRE)
+✅ Envios ficam registrados (tabela `generated_reports`, com histórico visível na tela)
+✅ Erros ficam registrados (status "erro" + mensagem, nunca falha silenciosamente)
+✅ Usuário consegue desabilitar envios (checkbox "Ativar envio automático")
+✅ Destinatários não ficam fixos no código (campo de texto livre, salvo no banco)
+
+## Pendências desta fase
+
+- Precisão de horário limitada pelo plano gratuito da Vercel (ver decisão acima).
+- Envio de recibo por e-mail ainda não conectado à nova infraestrutura (pendência herdada da
+  Fase 10, agora desbloqueada).
+- Relatório mensal usa sempre o mês calendário anterior completo — não há opção de gerar para
+  um mês específico diferente pela interface (só o "gerar agora", que sempre olha para o mês
+  anterior ao atual).
+
+## Próxima fase sugerida
+
+**Fase 12 — Exportações, auditoria e acabamento**: exportações (CSV/Excel/PDF) das telas
+principais, revisão completa de permissões e políticas de RLS, testes automatizados mais
+amplos (incluindo end-to-end), estados vazios, tratamento de erros, documentação final, backup
+e restauração.
 
 Não inicie esta fase automaticamente — aguarde autorização.

@@ -21,6 +21,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: "Conciliação bancária", href: "/conciliacao" },
   { label: "Locatários", href: "/locatarios" },
   { label: "Recibos", href: "/recibos" },
+  { label: "Relatórios", href: "/relatorios" },
 ];
 
 const NAV_CADASTROS: NavItem[] = [

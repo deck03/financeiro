@@ -13,10 +13,20 @@ export type Regime = "caixa" | "competencia";
  * natureza gerencial, família) para alimentar buildDRE(). No regime de
  * caixa, usa as liquidações (financial_settlements); no regime de
  * competência, usa os lançamentos diretamente pela data de competência.
+ *
+ * @param organizationId use apenas quando chamado fora de uma sessão de
+ *   usuário autenticado (cliente admin, sem RLS) — ver mesma observação em
+ *   projection-query.ts.
  */
-export async function fetchClassifiedItems(supabase: any, regime: Regime, from: string, to: string): Promise<ClassifiedItem[]> {
+export async function fetchClassifiedItems(
+  supabase: any,
+  regime: Regime,
+  from: string,
+  to: string,
+  organizationId?: string
+): Promise<ClassifiedItem[]> {
   if (regime === "caixa") {
-    const { data } = await supabase
+    let query = supabase
       .from("financial_settlements")
       .select(
         "amount, financial_entries(type, chart_account_categories(dre_behavior, managerial_nature, chart_account_families(name)))"
@@ -24,6 +34,8 @@ export async function fetchClassifiedItems(supabase: any, regime: Regime, from: 
       .eq("status", "valido")
       .gte("settlement_date", from)
       .lte("settlement_date", to);
+    if (organizationId) query = query.eq("organization_id", organizationId);
+    const { data } = await query;
 
     return (data ?? [])
       .filter((s: any) => s.financial_entries)
@@ -36,12 +48,14 @@ export async function fetchClassifiedItems(supabase: any, regime: Regime, from: 
       }));
   }
 
-  const { data } = await supabase
+  let query = supabase
     .from("financial_entries")
     .select("type, original_amount, chart_account_categories(dre_behavior, managerial_nature, chart_account_families(name))")
     .gte("competence_date", from)
     .lte("competence_date", to)
     .not("status", "in", "(cancelado,estornado)");
+  if (organizationId) query = query.eq("organization_id", organizationId);
+  const { data } = await query;
 
   return (data ?? []).map((e: any) => ({
     type: e.type,
@@ -59,14 +73,16 @@ export async function fetchClassifiedItems(supabase: any, regime: Regime, from: 
  * lucros normalmente acontece via transferência entre contas, não via
  * lançamento de despesa.
  */
-export async function fetchPartnerTransfers(supabase: any, from: string, to: string) {
-  const { data } = await supabase
+export async function fetchPartnerTransfers(supabase: any, from: string, to: string, organizationId?: string) {
+  let query = supabase
     .from("transfers")
     .select("id, amount, transfer_date, classification, from:from_bank_account_id(display_name), to:to_bank_account_id(display_name)")
     .neq("classification", "transferencia_interna")
     .eq("status", "valido")
     .gte("transfer_date", from)
     .lte("transfer_date", to);
+  if (organizationId) query = query.eq("organization_id", organizationId);
 
+  const { data } = await query;
   return data ?? [];
 }

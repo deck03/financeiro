@@ -1186,6 +1186,99 @@ export type Database = {
         };
         Relationships: [];
       };
+      report_configs: {
+        Row: {
+          id: string;
+          organization_id: string;
+          report_type: string;
+          enabled: boolean;
+          recipients: string[];
+          day_of_week: number | null;
+          day_of_month: number | null;
+          send_hour: number;
+          timezone: string;
+          created_at: string;
+          updated_at: string;
+          created_by: string | null;
+          updated_by: string | null;
+        };
+        Insert: {
+          id?: string;
+          organization_id: string;
+          report_type: string;
+          enabled?: boolean;
+          recipients?: string[];
+          day_of_week?: number | null;
+          day_of_month?: number | null;
+          send_hour?: number;
+          timezone?: string;
+          created_at?: string;
+          updated_at?: string;
+          created_by?: string | null;
+          updated_by?: string | null;
+        };
+        Update: {
+          id?: string;
+          organization_id?: string;
+          report_type?: string;
+          enabled?: boolean;
+          recipients?: string[];
+          day_of_week?: number | null;
+          day_of_month?: number | null;
+          send_hour?: number;
+          timezone?: string;
+          created_at?: string;
+          updated_at?: string;
+          created_by?: string | null;
+          updated_by?: string | null;
+        };
+        Relationships: [];
+      };
+      generated_reports: {
+        Row: {
+          id: string;
+          organization_id: string;
+          report_config_id: string | null;
+          report_type: string;
+          period_start: string;
+          period_end: string;
+          recipients: string[];
+          status: string;
+          error_message: string | null;
+          triggered_by: string;
+          sent_at: string;
+          created_by: string | null;
+        };
+        Insert: {
+          id?: string;
+          organization_id: string;
+          report_config_id?: string | null;
+          report_type: string;
+          period_start: string;
+          period_end: string;
+          recipients?: string[];
+          status: string;
+          error_message?: string | null;
+          triggered_by?: string;
+          sent_at?: string;
+          created_by?: string | null;
+        };
+        Update: {
+          id?: string;
+          organization_id?: string;
+          report_config_id?: string | null;
+          report_type?: string;
+          period_start?: string;
+          period_end?: string;
+          recipients?: string[];
+          status?: string;
+          error_message?: string | null;
+          triggered_by?: string;
+          sent_at?: string;
+          created_by?: string | null;
+        };
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: {
