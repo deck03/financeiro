@@ -19,6 +19,8 @@ const NAV_ITEMS: NavItem[] = [
   { label: "Comparação trimestral", href: "/comparacao-trimestral" },
   { label: "Importação OFX", href: "/importacao-ofx" },
   { label: "Conciliação bancária", href: "/conciliacao" },
+  { label: "Locatários", href: "/locatarios" },
+  { label: "Recibos", href: "/recibos" },
 ];
 
 const NAV_CADASTROS: NavItem[] = [

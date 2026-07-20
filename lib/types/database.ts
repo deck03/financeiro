@@ -1120,6 +1120,72 @@ export type Database = {
         };
         Relationships: [];
       };
+      rent_receipts: {
+        Row: {
+          id: string;
+          organization_id: string;
+          entry_id: string;
+          settlement_id: string;
+          counterparty_id: string | null;
+          receipt_number: number;
+          receipt_number_formatted: string;
+          amount: number;
+          amount_in_words: string;
+          payment_date: string;
+          reference_period: string | null;
+          space_description: string | null;
+          payment_method_id: string | null;
+          notes: string | null;
+          verification_code: string;
+          file_path: string | null;
+          status: string;
+          created_at: string;
+          created_by: string | null;
+        };
+        Insert: {
+          id?: string;
+          organization_id: string;
+          entry_id: string;
+          settlement_id: string;
+          counterparty_id?: string | null;
+          receipt_number: number;
+          receipt_number_formatted: string;
+          amount: number;
+          amount_in_words: string;
+          payment_date: string;
+          reference_period?: string | null;
+          space_description?: string | null;
+          payment_method_id?: string | null;
+          notes?: string | null;
+          verification_code: string;
+          file_path?: string | null;
+          status?: string;
+          created_at?: string;
+          created_by?: string | null;
+        };
+        Update: {
+          id?: string;
+          organization_id?: string;
+          entry_id?: string;
+          settlement_id?: string;
+          counterparty_id?: string | null;
+          receipt_number?: number;
+          receipt_number_formatted?: string;
+          amount?: number;
+          amount_in_words?: string;
+          payment_date?: string;
+          reference_period?: string | null;
+          space_description?: string | null;
+          payment_method_id?: string | null;
+          notes?: string | null;
+          verification_code?: string;
+          file_path?: string | null;
+          status?: string;
+          created_at?: string;
+          created_by?: string | null;
+        };
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: {
@@ -1242,6 +1308,21 @@ export type Database = {
       unignore_bank_transaction: {
         Args: { p_bank_transaction_id: string };
         Returns: undefined;
+      };
+      reserve_receipt_number: {
+        Args: Record<string, never>;
+        Returns: number;
+      };
+      create_rent_receipt: {
+        Args: {
+          p_settlement_id: string;
+          p_amount_in_words: string;
+          p_reference_period?: string | null;
+          p_space_description?: string | null;
+          p_notes?: string | null;
+          p_verification_code?: string | null;
+        };
+        Returns: string;
       };
     };
     Enums: Record<string, never>;

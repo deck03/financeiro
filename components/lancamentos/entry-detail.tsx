@@ -193,6 +193,7 @@ export async function EntryDetail({ entryId, type }: { entryId: string; type: "r
                 <th className="py-2 pr-4 font-medium">Encargos</th>
                 <th className="py-2 pr-4 font-medium">Status</th>
                 {canCancel && <th className="py-2 pr-4 font-medium">Ações</th>}
+                {type === "receita" && <th className="py-2 pr-4 font-medium">Recibo</th>}
               </tr>
             </thead>
             <tbody>
@@ -215,12 +216,21 @@ export async function EntryDetail({ entryId, type }: { entryId: string; type: "r
                         {s.status === "valido" && <ReverseSettlementButton settlementId={s.id} />}
                       </td>
                     )}
+                    {type === "receita" && (
+                      <td className="py-2 pr-4">
+                        {s.status === "valido" && (
+                          <Link href={`/recibos/novo?settlement=${s.id}`} className="text-sm font-medium text-brand-accent hover:underline">
+                            Emitir recibo
+                          </Link>
+                        )}
+                      </td>
+                    )}
                   </tr>
                 );
               })}
               {(settlements ?? []).length === 0 && (
                 <tr>
-                  <td colSpan={canCancel ? 6 : 5} className="py-4 text-center text-ink-faint">
+                  <td colSpan={canCancel ? (type === "receita" ? 7 : 6) : (type === "receita" ? 6 : 5)} className="py-4 text-center text-ink-faint">
                     Nenhuma liquidação registrada.
                   </td>
                 </tr>

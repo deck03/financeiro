@@ -46,6 +46,7 @@ Você tem duas opções.
    6. `supabase/migrations/0004_saldos_transferencias_fluxo.sql` (Fase 4 — saldos calculados, transferências, fluxo de caixa realizado)
    7. `supabase/migrations/0005_lancamentos_avancados.sql` (Fase 5 — pagamento/recebimento parcial, estorno, parcelamento, recorrência)
    8. `supabase/migrations/0006_ofx_conciliacao.sql` (Fase 9 — importação OFX e conciliação bancária)
+   9. `supabase/migrations/0007_recibos_aluguel.sql` (Fase 10 — recibos de aluguel)
 
 ### Opção B — pela Supabase CLI (recomendado a partir de várias migrations)
 
@@ -1094,5 +1095,115 @@ nenhuma nova permissão foi criada.
 **Fase 10 — Recibos de aluguel**: dados dos locatários, configurações do emissor, numeração
 sequencial, geração de recibo em PDF, armazenamento privado, download, envio por e-mail,
 histórico.
+
+Não inicie esta fase automaticamente — aguarde autorização.
+
+---
+
+# Fase 10 — Recibos de aluguel
+
+## O que foi entregue
+
+### Funcionalidades implementadas
+- **Geração de recibo em PDF** a partir de um recebimento já confirmado (uma liquidação
+  específica, não o lançamento inteiro — importante quando há recebimento parcial)
+- **Numeração sequencial atômica**: reaproveita o prefixo e o contador já existentes em
+  Configurações desde a Fase 1; dois recibos nunca saem com o mesmo número, mesmo gerados ao
+  mesmo tempo
+- **Valor por extenso em português**, calculado por uma função própria (sem depender de
+  biblioteca externa), testada com 11 casos diferentes
+- **Armazenamento privado** no Supabase Storage, com download via link assinado
+- **Tela de Locatários**: visão dedicada dos contrapartes marcados como locatário, com atalho
+  direto para emitir recibo do recebimento mais recente ainda sem recibo
+- **Histórico de recibos** emitidos, ordenado por número
+- Atalho "Emitir recibo" direto na liquidação de uma conta a receber
+
+### Telas criadas
+- `/recibos` (histórico)
+- `/recibos/novo` (emissão)
+- `/recibos/[id]` (detalhe + download)
+- `/locatarios`
+
+### Telas alteradas
+- Detalhe de conta a receber: cada liquidação válida agora tem um link "Emitir recibo"
+
+### Banco de dados
+**Migration:** `supabase/migrations/0007_recibos_aluguel.sql`
+
+**Tabela criada:** `rent_receipts`
+
+**Funções SQL criadas:**
+- `reserve_receipt_number()` — incrementa o contador de forma atômica (a trava vem do próprio
+  `UPDATE`, que bloqueia a linha até o fim da transação)
+- `create_rent_receipt(...)` — valida que a liquidação é de um recebimento confirmado, garante
+  que não existe recibo duplicado para a mesma liquidação, e grava o recibo com o número
+  reservado
+
+**Storage:** bucket privado `receipts`, mesmo padrão de segurança por pasta (`{organization_id}/...`)
+usado nos anexos desde a Fase 3.
+
+**Permissão usada:** `gerar_recibos`, já existia desde a Fase 1.
+
+**Dependência adicionada:** `pdf-lib` — biblioteca consolidada e leve para geração de PDF em
+Node.js, escolhida em vez de `@react-pdf/renderer` por ter menor superfície de complexidade
+para um documento de layout fixo como um recibo (decisão antecipada desde o diagnóstico da
+Fase 0).
+
+### Decisões tomadas nesta fase
+- **Envio por e-mail ficou para a Fase 11** — foi avisado antes de começar. Enviar e-mail de
+  verdade exige um provedor configurado (chave de API, domínio verificado, etc.), que é
+  exatamente a infraestrutura que a Fase 11 (Relatórios automáticos) vai construir. Implementar
+  isso agora seria antecipar trabalho de forma isolada, sem a camada correta por trás.
+- **"Locatários" é uma visão especializada de Contrapartes**, não uma tabela nova — evita ter
+  dois cadastros de pessoa/empresa que precisariam ficar sincronizados.
+- **Configurações do emissor (logo) não ganharam upload de imagem nesta fase** — o PDF usa
+  nome, CNPJ/CPF e endereço (já configuráveis desde a Fase 1), sem logo. A coluna `logo_url` já
+  existe no banco desde então; dá para usar quando fizer sentido, sem mudança de schema.
+- **Recibo vinculado à liquidação, não ao lançamento** — importante porque, com pagamento
+  parcial (Fase 5), um mesmo lançamento pode ter várias liquidações ao longo do tempo; cada
+  liquidação pode (ou não) ter seu próprio recibo.
+
+## Como testar
+
+1. Rode a migration `0007_recibos_aluguel.sql` (seção 3 acima).
+2. Marque uma contraparte existente (ou crie uma nova) com o tipo "Locatário" em Contrapartes.
+3. Registre um recebimento de uma conta a receber vinculada a essa contraparte (Fase 3/5).
+4. Acesse **Locatários** — confirme que aparece o link "Emitir recibo" com o valor e a data do
+   recebimento.
+5. Clique nele, preencha período de referência e descrição do espaço, clique "Gerar recibo em
+   PDF" — confirme que você é redirecionado para a tela do recibo com número sequencial (ex.:
+   REC-000001).
+6. Clique em "Baixar PDF" — confirme que o arquivo abre e mostra: nome do DECK 03, dados do
+   locatário, valor em número e por extenso, data, e o aviso de que não é nota fiscal.
+7. Tente emitir um segundo recibo para a mesma liquidação — confirme que o sistema avisa que já
+   existe um recibo para ela e mostra o link para vê-lo.
+8. Gere outro recibo (de outra liquidação) — confirme que o número sequencial avançou
+   corretamente (ex.: REC-000002).
+9. Acesse **Recibos** — confirme que o histórico lista os dois, mais recentes primeiro.
+
+## Critérios de aceite
+
+✅ Recibo é gerado a partir de recebimento confirmado (sempre vinculado a uma liquidação válida,
+   nunca a um valor em aberto)
+✅ PDF possui os dados necessários (emissor, locatário, valor e extenso, data, período, espaço,
+   forma de pagamento, observações, código de verificação, aviso de não ser nota fiscal)
+✅ Documento fica vinculado ao lançamento (e à liquidação específica)
+✅ Recibo não é tratado como nota fiscal (aviso explícito no rodapé do PDF)
+✅ Arquivo não fica público (bucket privado, acesso só via link assinado e permissão)
+
+## Pendências desta fase
+
+- Envio por e-mail (ver decisão acima — Fase 11).
+- Sem upload de logo (ver decisão acima).
+- Sem cancelamento/reemissão de recibo pela interface — o campo `status` já existe no banco
+  (`ativo`/`cancelado`) para isso, mas a ação ainda não tem tela própria.
+- O parser não valida CPF/CNPJ do locatário — assume o que já está cadastrado em Contrapartes.
+
+## Próxima fase sugerida
+
+**Fase 11 — Relatórios automáticos**: relatório semanal (para o administrador fiscalizar a
+qualidade dos dados) e mensal (para o CEO), configuração de destinatários e horário, histórico
+de envios, reenvio manual — e é aqui que o provedor de e-mail finalmente entra, permitindo
+também o envio de recibos por e-mail.
 
 Não inicie esta fase automaticamente — aguarde autorização.
