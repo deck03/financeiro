@@ -1241,8 +1241,10 @@ Não inicie esta fase automaticamente — aguarde autorização.
 **Permissão usada:** `alterar_configuracoes`, já existia desde a Fase 1.
 
 ### Infraestrutura nova
-- **Camada de e-mail desacoplada** (`lib/email/`): uma interface `EmailProvider` com uma
-  implementação via Resend. Trocar de provedor no futuro é mudar uma linha em
+- **Camada de e-mail desacoplada** (`lib/email/`): uma interface `EmailProvider` com duas
+  implementações — SMTP genérico (Gmail, Outlook, etc.) e Resend. O sistema escolhe
+  automaticamente qual usar com base nas variáveis de ambiente configuradas (SMTP tem
+  prioridade se as duas estiverem presentes). Trocar de provedor no futuro é mudar
   `lib/email/index.ts`, sem tocar nos relatórios nem nos recibos.
 - **Rota agendada** `app/api/cron/send-reports/route.ts`, protegida por um segredo
   (`CRON_SECRET`), chamada uma vez por dia pelo **Vercel Cron** (configurado em `vercel.json`).
@@ -1258,8 +1260,10 @@ Não inicie esta fase automaticamente — aguarde autorização.
   documentado), mas o disparo de verdade acontece no horário fixo do cron
   (aproximadamente 8h de Brasília). Se isso incomodar no uso real, dá para resolver com o
   plano Vercel Pro (cron mais flexível) sem mudar nada da lógica.
-- **Provedor de e-mail: Resend**, conforme já previsto desde a Fase 0. Requer conta e chave de
-  API — passo a passo abaixo.
+- **Provedor de e-mail: SMTP (Gmail/Outlook) ou Resend**, à escolha. Adicionei a opção SMTP
+  depois da entrega inicial desta fase, especificamente para quem não tem (ou não quer, por
+  enquanto) verificar um domínio próprio — usar uma conta de e-mail já existente com uma senha
+  de app é mais rápido de configurar. Passo a passo das duas opções abaixo.
 - **"Lançamento sem classificação" virou "lançamento sem conta bancária definida"** no alerta
   do relatório semanal — como a categoria já é obrigatória em todo lançamento desde a Fase 3,
   esse alerta específico do escopo original não tinha como ocorrer; troquei por uma checagem de
@@ -1268,7 +1272,37 @@ Não inicie esta fase automaticamente — aguarde autorização.
   infraestrutura de e-mail já existe agora; conectar o botão "Enviar recibo por e-mail" é uma
   tarefa pequena que pode ser feita a qualquer momento, sem depender de mais nenhuma fase.
 
-## Passo a passo: configurar o Resend
+## Passo a passo: configurar o envio de e-mail
+
+Você tem duas opções — escolha uma (ou configure as duas, o sistema usa SMTP automaticamente
+se ambas estiverem presentes).
+
+### Opção A — Gmail (ou outro e-mail comum), via SMTP — não exige domínio próprio
+
+Essa é a opção mais simples se você não tem um domínio verificado ainda.
+
+1. Use uma conta do Gmail que faça sentido para o DECK 03 (pode ser uma existente, ou criar uma
+   nova, tipo `financeiro.deck03@gmail.com`).
+2. Ative a **verificação em duas etapas** nessa conta, se ainda não estiver ativa: acesse
+   [myaccount.google.com/security](https://myaccount.google.com/security) → **Verificação em
+   duas etapas** → siga o passo a passo do Google.
+3. Depois de ativada, ainda em **Segurança**, procure **Senhas de app** (ou acesse direto
+   [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords)).
+4. Crie uma nova senha de app — dê um nome tipo "DECK 03 Financeiro" — o Google vai gerar uma
+   senha de 16 caracteres. **Copie essa senha** (ela só aparece uma vez).
+5. Na Vercel, vá em **Settings → Environment Variables** e adicione:
+   - `SMTP_HOST`: `smtp.gmail.com`
+   - `SMTP_PORT`: `587`
+   - `SMTP_USER`: o e-mail do Gmail (ex.: `financeiro.deck03@gmail.com`)
+   - `SMTP_PASSWORD`: a senha de app de 16 caracteres gerada no passo 4 (não é a senha normal
+     da conta)
+   - `EMAIL_FROM`: o mesmo e-mail do Gmail
+6. Redeploy o projeto.
+
+Essa opção permite enviar para qualquer destinatário, sem precisar verificar domínio — e
+continua sendo automático (o Vercel Cron dispara sozinho, sem precisar do sistema aberto).
+
+### Opção B — Resend — exige domínio verificado para enviar a destinatários externos
 
 1. Crie uma conta em [resend.com](https://resend.com) (tem plano gratuito).
 2. No painel, vá em **API Keys** → **Create API Key** → copie a chave gerada.
