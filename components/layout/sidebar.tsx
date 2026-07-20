@@ -15,7 +15,8 @@ const NAV_ITEMS: NavItem[] = [
   { label: "Contas a receber", href: "/contas-a-receber" },
   { label: "Recorrências", href: "/recorrencias" },
   { label: "Transferências", href: "/transferencias" },
-  { label: "DRE gerencial", href: "/dre", disabled: true },
+  { label: "DRE gerencial", href: "/dre" },
+  { label: "Comparação trimestral", href: "/comparacao-trimestral" },
 ];
 
 const NAV_CADASTROS: NavItem[] = [

@@ -462,7 +462,8 @@ export default async function DashboardPage() {
               label="Resultado operacional preliminar"
               value={formatCurrency(operatingResult)}
               tone={operatingResult >= 0 ? "positive" : "negative"}
-              sublabel="Cálculo simplificado — DRE completa na Fase 8"
+              sublabel="Ver DRE gerencial completa"
+              href="/dre"
             />
           </div>
 

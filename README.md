@@ -884,3 +884,106 @@ drill-down até os lançamentos; comparação trimestral rigorosa (trimestre atu
 vs. mesmo trimestre do ano anterior).
 
 Não inicie esta fase automaticamente — aguarde autorização.
+
+---
+
+# Fase 8 — DRE gerencial e comparação trimestral
+
+## O que foi entregue
+
+### Funcionalidades implementadas
+- **DRE gerencial** em `/dre`, com alternância entre regime de caixa e regime de competência,
+  e período mensal, trimestral ou personalizado
+- Estrutura da DRE: Receitas operacionais → Despesas operacionais (agrupadas por família do
+  plano de contas) → Resultado operacional gerencial → Receitas/despesas financeiras →
+  Resultado gerencial antes de investimentos → Investimentos (separados) → Movimentações de
+  sócios e pessoa física (separadas, combinando lançamentos e transferências classificadas)
+- **Drill-down**: toda linha da DRE é clicável e leva para a lista dos lançamentos que a
+  compõem, em `/dre/detalhe`
+- **Comparação trimestral** em `/comparacao-trimestral`: trimestre atual vs. anterior, vs.
+  mesmo trimestre do ano anterior, ou dois trimestres escolhidos livremente — com variação em
+  R$ e %, indicação de melhora/piora por cor, e as famílias de despesa que mais explicam a
+  variação
+
+### Telas criadas
+- `/dre`
+- `/dre/detalhe`
+- `/comparacao-trimestral`
+
+### Telas alteradas
+- Dashboard: o card "Resultado operacional preliminar" agora linka para a DRE completa
+
+### Banco de dados
+**Nenhuma migration nova nesta fase.** A DRE inteira é composta a partir de campos que já
+existiam desde a Fase 2 (`dre_behavior`, `managerial_nature` em cada categoria) e da fórmula de
+liquidações da Fase 3/5 — não foi preciso mudar nada no banco.
+
+### Decisões tomadas nesta fase
+- **"Deduções gerenciais" (item 2 da estrutura do escopo) não foi implementada** — nenhuma
+  categoria de dedução foi configurada até agora. Quando fizer sentido, dá pra adicionar
+  reaproveitando o mesmo campo `dre_behavior`, sem mudança de schema.
+- **Despesas operacionais são agrupadas por família do plano de contas**, não pelas 5 linhas
+  fixas do escopo (Pessoal, Estrutura, Administrativo, Comercial, Outras) — como as famílias
+  seedadas na Fase 2 já correspondem quase exatamente a essas categorias (Pessoal e
+  prestadores, Estrutura, Administrativo...), o resultado prático é o mesmo, mas com a
+  vantagem de refletir automaticamente qualquer família nova que o administrador criar.
+- **Movimentações de sócios combinam duas fontes**: lançamentos categorizados com
+  `managerial_nature = movimentacao_socios/pessoa_fisica` (raro, mas possível) e
+  transferências com essa classificação (o caminho mais comum, construído na Fase 4). A DRE
+  mostra as duas fontes juntas na mesma seção, para não haver um "buraco" caso a distribuição
+  de lucros tenha sido feita por transferência em vez de lançamento.
+- **Comparação trimestral usa sempre regime de caixa** — é o que reflete o que realmente
+  aconteceu no caixa da empresa, coerente com a prioridade #1 do escopo. Não há alternância de
+  regime nesta tela (diferente da DRE), para manter a comparação simples e direta.
+- **"Inadimplência" não entrou na comparação trimestral** — calcular quanto estava vencido no
+  final de um trimestre passado exigiria reconstruir o status histórico de cada lançamento
+  (hoje só temos o status atual), o que não existe no sistema ainda. Fica documentado como
+  limitação; se fizer falta, precisaria de uma tabela de histórico de status.
+
+## Como testar
+
+1. Nenhuma migration nova — não precisa rodar nada no Supabase.
+2. Acesse a **DRE gerencial**. No regime de caixa, mês atual, confirme que "Receitas
+   operacionais" bate com a soma das receitas do Fluxo de Caixa Realizado (Fase 4) no mesmo
+   período.
+3. Clique em "Receitas operacionais" — confirme que abre a lista de lançamentos que compõem
+   aquele valor, e que a soma da lista bate com o valor mostrado na DRE.
+4. Alterne para "Regime de competência" — confirme que os valores mudam (ou permanecem iguais,
+   se não houver diferença entre pago e competência no período) e que o rótulo do regime muda
+   visivelmente.
+5. Crie uma transferência classificada como "Distribuição de lucros" (Fase 4) — confirme que
+   ela aparece na seção "Movimentações de sócios" da DRE, e que "Resultado operacional
+   gerencial" não muda por causa dela.
+6. Mude o período para "Trimestral" — confirme que os valores mudam para refletir os três
+   meses do trimestre selecionado.
+7. Acesse **Comparação trimestral** — confirme que "Trimestre atual x anterior" mostra os dois
+   trimestres corretos para a data de hoje, com variação em R$ e % calculada certinho.
+8. Teste "dois trimestres específicos" escolhendo dois trimestres arbitrários.
+
+## Critérios de aceite
+
+✅ Valores podem ser rastreados até os lançamentos (drill-down em toda linha da DRE)
+✅ Caixa e competência apresentam diferenças corretamente (fontes de dados distintas —
+   liquidações vs. lançamentos por competência)
+✅ Comparações mostram variações em reais e percentuais (com indicação visual de melhora/piora)
+✅ Não há divergência entre DRE e detalhamento (o drill-down usa exatamente os mesmos critérios
+   de classificação — `dre_behavior`, `managerial_nature`, família — usados para montar a DRE)
+
+## Pendências desta fase
+
+- Deduções gerenciais não configuradas (ver decisão acima).
+- Inadimplência histórica não entra na comparação trimestral (ver decisão acima).
+- Exportação da DRE (PDF/Excel) fica para a Fase 12 (Exportações), como planejado desde o
+  início.
+- O drill-down agrupa por família via correspondência de nome — funciona bem para o uso normal
+  do sistema, mas duas famílias com nomes idênticos (o que a interface de cadastro não impede
+  explicitamente) fariam o drill-down misturar as duas. Caso vire um problema real, dá pra
+  trocar para agrupar por ID de família em vez de nome.
+
+## Próxima fase sugerida
+
+**Fase 9 — Importação OFX e conciliação**: upload de OFX (inicialmente C6 Bank),
+pré-visualização, deduplicação, criação de lançamento a partir da transação bancária,
+vinculação com lançamento existente, conciliação manual, desfazer conciliação.
+
+Não inicie esta fase automaticamente — aguarde autorização.
