@@ -24,12 +24,12 @@ export async function saveReportConfigAction(_prev: FormState, formData: FormDat
     return { error: "Você não tem permissão para configurar relatórios." };
   }
 
-  const parsed = reportConfigSchema.safeParse({
+const parsed = reportConfigSchema.safeParse({
     report_type: formData.get("report_type"),
     enabled: formData.get("enabled") === "on",
-    recipients: formData.get("recipients"),
-    day_of_week: formData.get("day_of_week"),
-    day_of_month: formData.get("day_of_month"),
+    recipients: formData.get("recipients") || "",
+    day_of_week: formData.get("day_of_week") || "",
+    day_of_month: formData.get("day_of_month") || "",
     send_hour: formData.get("send_hour"),
   });
 
@@ -81,3 +81,5 @@ export async function sendReportNowAction(reportType: ReportType) {
   await sendReport(supabase, organizationId, reportType, recipients, "manual", config?.id ?? null, userId);
   revalidatePath("/relatorios");
 }
+
+"Corrige validação da configuração de relatórios"
