@@ -5,6 +5,7 @@ import { requirePermission } from "@/lib/permissions";
 import { reportConfigSchema, parseRecipients } from "@/lib/validation/relatorios";
 import { sendReport, type ReportType } from "@/lib/reports/send";
 import { revalidatePath } from "next/cache";
+import { logAudit } from "@/lib/audit";
 
 export type FormState = { error?: string; success?: boolean };
 
@@ -24,12 +25,15 @@ export async function saveReportConfigAction(_prev: FormState, formData: FormDat
     return { error: "Você não tem permissão para configurar relatórios." };
   }
 
-const parsed = reportConfigSchema.safeParse({
+  const parsed = reportConfigSchema.safeParse({
     report_type: formData.get("report_type"),
     enabled: formData.get("enabled") === "on",
-    recipients: formData.get("recipients") || "",
-    day_of_week: formData.get("day_of_week") || "",
-    day_of_month: formData.get("day_of_month") || "",
+    recipients: formData.get("recipients") ?? "",
+    // formData.get() retorna null quando o campo não existe no formulário
+    // (o semanal não envia day_of_month e vice-versa) — o schema espera
+    // string vazia nesses casos. Correção da Fase 11, consolidada aqui.
+    day_of_week: formData.get("day_of_week") ?? "",
+    day_of_month: formData.get("day_of_month") ?? "",
     send_hour: formData.get("send_hour"),
   });
 
@@ -62,6 +66,12 @@ const parsed = reportConfigSchema.safeParse({
 
   if (error) return { error: "Não foi possível salvar a configuração." };
 
+  await logAudit({
+    action: "editar",
+    entity: "report_configs",
+    metadata: { tipo: data.report_type, ativo: data.enabled ?? false, destinatarios: recipients.length },
+  });
+
   revalidatePath("/relatorios");
   return { success: true };
 }
@@ -79,7 +89,6 @@ export async function sendReportNowAction(reportType: ReportType) {
   const recipients = config?.recipients ?? [];
 
   await sendReport(supabase, organizationId, reportType, recipients, "manual", config?.id ?? null, userId);
+  await logAudit({ action: "enviar", entity: "generated_reports", metadata: { tipo: reportType, origem: "manual" } });
   revalidatePath("/relatorios");
 }
-
-"Corrige validação da configuração de relatórios"

@@ -5,6 +5,7 @@ import { requirePermission } from "@/lib/permissions";
 import { amountInWords } from "@/lib/receipts/amount-in-words";
 import { generateReceiptPdf } from "@/lib/receipts/generate-pdf";
 import { revalidatePath } from "next/cache";
+import { logAudit } from "@/lib/audit";
 import { redirect } from "next/navigation";
 
 export type FormState = { error?: string };
@@ -108,6 +109,13 @@ export async function generateReceiptAction(_prev: FormState, formData: FormData
   }
 
   await supabase.from("rent_receipts").update({ file_path: filePath }).eq("id", receiptId);
+
+  await logAudit({
+    action: "gerar",
+    entity: "rent_receipts",
+    entityId: receiptId,
+    newValue: { numero: receipt.receipt_number_formatted, valor: Number(receipt.amount) },
+  });
 
   revalidatePath("/recibos");
   redirect(`/recibos/${receiptId}`);

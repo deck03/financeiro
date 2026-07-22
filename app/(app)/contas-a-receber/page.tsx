@@ -6,6 +6,7 @@ import Link from "next/link";
 import { EntryFilters } from "@/components/lancamentos/entry-filters";
 import { EntriesTable } from "@/components/lancamentos/entries-table";
 import { EntryTotals } from "@/components/lancamentos/entry-totals";
+import { ExportButtons } from "@/components/export-buttons";
 
 const OPEN_STATUSES = ["em_aberto", "agendado", "parcialmente_recebido"];
 
@@ -16,6 +17,7 @@ export default async function ContasAReceberPage({
 }) {
   const supabase = createClient();
   const canCreate = await hasPermission("criar_lancamentos");
+  const canExport = await hasPermission("exportar_relatorios");
   const today = new Date().toISOString().slice(0, 10);
 
   let query = supabase
@@ -69,7 +71,22 @@ export default async function ContasAReceberPage({
       <EntryTotals openTotal={openTotal} settledTotal={receivedTotal} settledLabel="Total recebido" overdueTotal={overdueTotal} />
 
       <Card>
-        <EntryFilters type="receita" />
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+          <EntryFilters type="receita" />
+          {canExport && (
+            <ExportButtons
+              options={(() => {
+                const qs = new URLSearchParams({ type: "receita" });
+                if (searchParams.q) qs.set("q", searchParams.q);
+                if (searchParams.status) qs.set("status", searchParams.status);
+                return [
+                  { label: "Exportar CSV", href: `/api/export/lancamentos?${qs.toString()}&format=csv` },
+                  { label: "Exportar Excel", href: `/api/export/lancamentos?${qs.toString()}&format=xlsx` },
+                ];
+              })()}
+            />
+          )}
+        </div>
         <EntriesTable entries={entries ?? []} basePath="/contas-a-receber" />
       </Card>
     </div>

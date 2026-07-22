@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { requirePermission } from "@/lib/permissions";
 import { organizationSettingsSchema } from "@/lib/validation/organization";
 import { revalidatePath } from "next/cache";
+import { logAudit } from "@/lib/audit";
 
 export type UpdateOrgSettingsState = {
   error?: string;
@@ -56,6 +57,15 @@ export async function updateOrganizationSettingsAction(
   if (error) {
     return { error: "Não foi possível salvar as configurações. Tente novamente." };
   }
+
+  await logAudit({
+    action: "editar",
+    entity: "organization_settings",
+    newValue: {
+      nome: parsed.data.display_name,
+      documento: parsed.data.document_number || null,
+    },
+  });
 
   revalidatePath("/configuracoes");
   return { success: true };

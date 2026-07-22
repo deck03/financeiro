@@ -12,6 +12,7 @@ import {
   cancelRecurringSchema,
 } from "@/lib/validation/lancamentos";
 import { revalidatePath } from "next/cache";
+import { logAudit } from "@/lib/audit";
 import { redirect } from "next/navigation";
 
 export type FormState = { error?: string; success?: boolean };
@@ -110,6 +111,13 @@ export async function createEntryAction(_prev: FormState, formData: FormData): P
     return { error: "Não foi possível criar o lançamento." };
   }
 
+  await logAudit({
+    action: "criar",
+    entity: "financial_entries",
+    entityId: inserted.id,
+    newValue: { tipo: data.type, descricao: data.description, valor: data.original_amount, vencimento: data.due_date },
+  });
+
   if (data.already_settled) {
     const { error: settleError } = await supabase.rpc("settle_entry", {
       p_entry_id: inserted.id,
@@ -175,6 +183,16 @@ export async function settleEntryFormAction(_prev: FormState, formData: FormData
     };
   }
 
+  await logAudit({
+    action: "liquidar",
+    entity: "financial_entries",
+    entityId: parsed.data.entry_id,
+    metadata: {
+      data: parsed.data.settlement_date,
+      valor: parsed.data.amount && parsed.data.amount !== "" ? Number(parsed.data.amount) : "integral",
+    },
+  });
+
   revalidatePath("/contas-a-pagar");
   revalidatePath("/contas-a-receber");
   return { success: true };
@@ -203,6 +221,13 @@ export async function reverseSettlementFormAction(_prev: FormState, formData: Fo
     return { error: error.message.includes("permissão") ? "Você não tem permissão para esta ação." : error.message };
   }
 
+  await logAudit({
+    action: "estornar",
+    entity: "financial_settlements",
+    entityId: parsed.data.settlement_id,
+    metadata: { motivo: parsed.data.reason ?? null },
+  });
+
   revalidatePath("/contas-a-pagar");
   revalidatePath("/contas-a-receber");
   return { success: true };
@@ -230,6 +255,13 @@ export async function cancelEntryFormAction(_prev: FormState, formData: FormData
   if (error) {
     return { error: error.message.includes("Sem permissão") ? "Você não tem permissão para esta ação." : error.message };
   }
+
+  await logAudit({
+    action: "cancelar",
+    entity: "financial_entries",
+    entityId: parsed.data.entry_id,
+    metadata: { motivo: parsed.data.reason ?? null },
+  });
 
   revalidatePath("/contas-a-pagar");
   revalidatePath("/contas-a-receber");
@@ -290,6 +322,17 @@ export async function createInstallmentPlanAction(_prev: FormState, formData: Fo
   if (error) {
     return { error: "Não foi possível criar o parcelamento." };
   }
+
+  await logAudit({
+    action: "criar",
+    entity: "installment_groups",
+    newValue: {
+      tipo: data.type,
+      descricao: data.description,
+      valorTotal: data.total_amount,
+      parcelas: data.installments_count,
+    },
+  });
 
   revalidatePath(data.type === "despesa" ? "/contas-a-pagar" : "/contas-a-receber");
   redirect(data.type === "despesa" ? "/contas-a-pagar" : "/contas-a-receber");
@@ -361,6 +404,13 @@ export async function createRecurringRuleAction(_prev: FormState, formData: Form
 
   await supabase.rpc("generate_recurring_instances", { p_rule_id: rule.id, p_months_ahead: 12 });
 
+  await logAudit({
+    action: "criar",
+    entity: "recurring_rules",
+    entityId: rule.id,
+    newValue: { tipo: data.type, descricao: data.description, valor: data.amount, frequencia: data.frequency },
+  });
+
   revalidatePath("/recorrencias");
   redirect("/recorrencias");
 }
@@ -371,6 +421,7 @@ export async function createRecurringRuleAction(_prev: FormState, formData: Form
 export async function generateMoreOccurrencesAction(ruleId: string) {
   const { supabase } = await getOrgIdAndUser();
   await supabase.rpc("generate_recurring_instances", { p_rule_id: ruleId, p_months_ahead: 12 });
+  await logAudit({ action: "gerar", entity: "recurring_rules", entityId: ruleId, metadata: { acao: "gerar ocorrências (+12 meses)" } });
   revalidatePath("/recorrencias");
 }
 
@@ -398,6 +449,13 @@ export async function cancelRecurringFormAction(_prev: FormState, formData: Form
   if (error) {
     return { error: error.message.includes("permissão") ? "Você não tem permissão para esta ação." : error.message };
   }
+
+  await logAudit({
+    action: "cancelar",
+    entity: "recurring_rules",
+    entityId: parsed.data.rule_id,
+    metadata: { escopo: parsed.data.scope },
+  });
 
   revalidatePath("/recorrencias");
   revalidatePath("/contas-a-pagar");

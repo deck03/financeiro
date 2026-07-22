@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { requirePermission } from "@/lib/permissions";
 import { costCenterSchema } from "@/lib/validation/centros-de-custo";
 import { revalidatePath } from "next/cache";
+import { logAudit } from "@/lib/audit";
 
 export type FormState = { error?: string; success?: boolean };
 
@@ -45,6 +46,7 @@ export async function createCostCenterAction(_prev: FormState, formData: FormDat
   });
 
   if (error) return { error: "Não foi possível criar o centro de custo." };
+  await logAudit({ action: "criar", entity: "cost_centers", newValue: { nome: parsed.data.name } });
   revalidatePath("/cadastros/centros-de-custo");
   return { success: true };
 }
@@ -54,6 +56,7 @@ export async function toggleCostCenterStatusAction(id: string, currentStatus: st
   const { supabase, userId } = await getOrgIdAndUser();
   const newStatus = currentStatus === "ativo" ? "inativo" : "ativo";
   await supabase.from("cost_centers").update({ status: newStatus, updated_by: userId }).eq("id", id);
+  await logAudit({ action: newStatus === "ativo" ? "ativar" : "desativar", entity: "cost_centers", entityId: id });
   revalidatePath("/cadastros/centros-de-custo");
 }
 
@@ -67,5 +70,6 @@ export async function setDefaultCostCenterAction(id: string) {
     .eq("organization_id", organizationId)
     .eq("is_default", true);
   await supabase.from("cost_centers").update({ is_default: true, updated_by: userId }).eq("id", id);
+  await logAudit({ action: "editar", entity: "cost_centers", entityId: id, metadata: { acao: "definido como padrão" } });
   revalidatePath("/cadastros/centros-de-custo");
 }

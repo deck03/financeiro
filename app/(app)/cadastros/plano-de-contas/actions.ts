@@ -8,6 +8,7 @@ import {
   chartSubcategorySchema,
 } from "@/lib/validation/plano-de-contas";
 import { revalidatePath } from "next/cache";
+import { logAudit } from "@/lib/audit";
 
 async function getOrgIdAndUser() {
   const supabase = createClient();
@@ -54,6 +55,7 @@ export async function createFamilyAction(_prev: FormState, formData: FormData): 
   });
 
   if (error) return { error: "Não foi possível criar a família." };
+  await logAudit({ action: "criar", entity: "chart_account_families", newValue: { nome: parsed.data.name, tipo: parsed.data.type } });
   revalidatePath("/cadastros/plano-de-contas");
   return { success: true };
 }
@@ -66,6 +68,7 @@ export async function toggleFamilyStatusAction(id: string, currentStatus: string
     .from("chart_account_families")
     .update({ status: newStatus, updated_by: userId })
     .eq("id", id);
+  await logAudit({ action: newStatus === "ativo" ? "ativar" : "desativar", entity: "chart_account_families", entityId: id });
   revalidatePath("/cadastros/plano-de-contas");
 }
 
@@ -105,6 +108,11 @@ export async function createCategoryAction(_prev: FormState, formData: FormData)
   });
 
   if (error) return { error: "Não foi possível criar a categoria." };
+  await logAudit({
+    action: "criar",
+    entity: "chart_account_categories",
+    newValue: { nome: parsed.data.name, comportamentoDre: parsed.data.dre_behavior },
+  });
   revalidatePath("/cadastros/plano-de-contas");
   return { success: true };
 }
@@ -117,6 +125,7 @@ export async function toggleCategoryStatusAction(id: string, currentStatus: stri
     .from("chart_account_categories")
     .update({ status: newStatus, updated_by: userId })
     .eq("id", id);
+  await logAudit({ action: newStatus === "ativo" ? "ativar" : "desativar", entity: "chart_account_categories", entityId: id });
   revalidatePath("/cadastros/plano-de-contas");
 }
 
@@ -150,6 +159,7 @@ export async function createSubcategoryAction(_prev: FormState, formData: FormDa
   });
 
   if (error) return { error: "Não foi possível criar a subcategoria." };
+  await logAudit({ action: "criar", entity: "chart_account_subcategories", newValue: { nome: parsed.data.name } });
   revalidatePath("/cadastros/plano-de-contas");
   return { success: true };
 }
@@ -162,5 +172,6 @@ export async function toggleSubcategoryStatusAction(id: string, currentStatus: s
     .from("chart_account_subcategories")
     .update({ status: newStatus, updated_by: userId })
     .eq("id", id);
+  await logAudit({ action: newStatus === "ativo" ? "ativar" : "desativar", entity: "chart_account_subcategories", entityId: id });
   revalidatePath("/cadastros/plano-de-contas");
 }

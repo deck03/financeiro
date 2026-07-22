@@ -33,7 +33,8 @@ const NAV_CADASTROS: NavItem[] = [
 ];
 
 const NAV_ADMIN: NavItem[] = [
-  { label: "Usuários e permissões", href: "/usuarios", disabled: true },
+  { label: "Usuários e permissões", href: "/usuarios" },
+  { label: "Auditoria", href: "/auditoria" },
   { label: "Configurações", href: "/configuracoes" },
 ];
 

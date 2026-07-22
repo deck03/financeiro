@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { requirePermission } from "@/lib/permissions";
 import { counterpartySchema } from "@/lib/validation/contrapartes";
 import { revalidatePath } from "next/cache";
+import { logAudit } from "@/lib/audit";
 
 export type FormState = { error?: string; success?: boolean };
 
@@ -58,6 +59,7 @@ export async function createCounterpartyAction(_prev: FormState, formData: FormD
   });
 
   if (error) return { error: "Não foi possível criar a contraparte." };
+  await logAudit({ action: "criar", entity: "counterparties", newValue: { nome: parsed.data.name, tipos: parsed.data.types } });
   revalidatePath("/cadastros/contrapartes");
   return { success: true };
 }
@@ -67,5 +69,6 @@ export async function toggleCounterpartyStatusAction(id: string, currentStatus: 
   const { supabase, userId } = await getOrgIdAndUser();
   const newStatus = currentStatus === "ativo" ? "inativo" : "ativo";
   await supabase.from("counterparties").update({ status: newStatus, updated_by: userId }).eq("id", id);
+  await logAudit({ action: newStatus === "ativo" ? "ativar" : "desativar", entity: "counterparties", entityId: id });
   revalidatePath("/cadastros/contrapartes");
 }

@@ -5,6 +5,7 @@ import { requirePermission } from "@/lib/permissions";
 import { previewOfxSchema, confirmOfxSchema, type ofxTransactionSchema } from "@/lib/validation/ofx";
 import { transactionHash } from "@/lib/ofx/hash";
 import { revalidatePath } from "next/cache";
+import { logAudit } from "@/lib/audit";
 import type { z } from "zod";
 
 type OfxTransaction = z.infer<typeof ofxTransactionSchema>;
@@ -174,6 +175,13 @@ export async function confirmOfxImportAction(
     .from("import_batches")
     .update({ imported_count: importedCount, duplicate_count: duplicateCount })
     .eq("id", batch.id);
+
+  await logAudit({
+    action: "importar",
+    entity: "import_batches",
+    entityId: batch.id,
+    metadata: { arquivo: fileName, importadas: importedCount, duplicadas: duplicateCount },
+  });
 
   revalidatePath("/conciliacao");
 

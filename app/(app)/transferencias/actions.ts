@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { requirePermission } from "@/lib/permissions";
 import { transferSchema } from "@/lib/validation/transferencias";
 import { revalidatePath } from "next/cache";
+import { logAudit } from "@/lib/audit";
 
 export type FormState = { error?: string; success?: boolean };
 
@@ -53,6 +54,16 @@ export async function createTransferAction(_prev: FormState, formData: FormData)
   if (error) {
     return { error: error.message.includes("titularidades") ? error.message : "Não foi possível criar a transferência." };
   }
+
+  await logAudit({
+    action: "criar",
+    entity: "transfers",
+    newValue: {
+      valor: parsed.data.amount,
+      data: parsed.data.transfer_date,
+      classificacao: parsed.data.classification,
+    },
+  });
 
   revalidatePath("/transferencias");
   revalidatePath("/cadastros/contas-bancarias");

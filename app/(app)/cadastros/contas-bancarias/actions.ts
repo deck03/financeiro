@@ -5,6 +5,7 @@ import { requirePermission } from "@/lib/permissions";
 import { bankAccountSchema } from "@/lib/validation/contas-bancarias";
 import { balanceSnapshotSchema } from "@/lib/validation/transferencias";
 import { revalidatePath } from "next/cache";
+import { logAudit } from "@/lib/audit";
 
 export type FormState = { error?: string; success?: boolean };
 
@@ -71,6 +72,11 @@ export async function createBankAccountAction(_prev: FormState, formData: FormDa
   });
 
   if (error) return { error: "Não foi possível criar a conta bancária." };
+  await logAudit({
+    action: "criar",
+    entity: "bank_accounts",
+    newValue: { nome: parsed.data.display_name, titularidade: parsed.data.ownership },
+  });
   revalidatePath("/cadastros/contas-bancarias");
   return { success: true };
 }
@@ -80,6 +86,7 @@ export async function toggleBankAccountStatusAction(id: string, currentStatus: s
   const { supabase, userId } = await getOrgIdAndUser();
   const newStatus = currentStatus === "ativa" ? "inativa" : "ativa";
   await supabase.from("bank_accounts").update({ status: newStatus, updated_by: userId }).eq("id", id);
+  await logAudit({ action: newStatus === "ativa" ? "ativar" : "desativar", entity: "bank_accounts", entityId: id });
   revalidatePath("/cadastros/contas-bancarias");
 }
 
@@ -118,6 +125,11 @@ export async function createBalanceSnapshotAction(_prev: FormState, formData: Fo
   });
 
   if (error) return { error: "Não foi possível registrar a conferência de saldo." };
+  await logAudit({
+    action: "criar",
+    entity: "bank_balance_snapshots",
+    metadata: { data: parsed.data.snapshot_date, saldoInformado: parsed.data.informed_balance },
+  });
 
   revalidatePath(`/cadastros/contas-bancarias/${parsed.data.bank_account_id}`);
   return { success: true };

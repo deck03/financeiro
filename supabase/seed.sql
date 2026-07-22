@@ -45,7 +45,9 @@ insert into permissions (key, name, category) values
   ('visualizar_logs', 'Visualizar logs de auditoria', 'auditoria'),
   ('alterar_configuracoes', 'Alterar configurações', 'administracao'),
   ('alterar_plano_de_contas', 'Alterar plano de contas', 'cadastros'),
-  ('alterar_contas_bancarias', 'Alterar contas bancárias', 'cadastros')
+  ('alterar_contas_bancarias', 'Alterar contas bancárias', 'cadastros'),
+  ('alterar_centros_de_custo', 'Alterar centros de custo', 'cadastros'),
+  ('alterar_formas_pagamento', 'Alterar formas de pagamento', 'cadastros')
 on conflict (key) do nothing;
 
 -- Permissões padrão do operador. O administrador poderá customizar por

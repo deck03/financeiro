@@ -48,6 +48,7 @@ Você tem duas opções.
    8. `supabase/migrations/0006_ofx_conciliacao.sql` (Fase 9 — importação OFX e conciliação bancária)
    9. `supabase/migrations/0007_recibos_aluguel.sql` (Fase 10 — recibos de aluguel)
    10. `supabase/migrations/0008_relatorios_automaticos.sql` (Fase 11 — relatórios automáticos)
+   11. `supabase/migrations/0009_exportacoes_auditoria_acabamento.sql` (Fase 12 — permissões restantes, imutabilidade dos logs de auditoria)
 
 ### Opção B — pela Supabase CLI (recomendado a partir de várias migrations)
 
@@ -1364,9 +1365,162 @@ continua sendo automático (o Vercel Cron dispara sozinho, sem precisar do siste
 
 ## Próxima fase sugerida
 
-**Fase 12 — Exportações, auditoria e acabamento**: exportações (CSV/Excel/PDF) das telas
-principais, revisão completa de permissões e políticas de RLS, testes automatizados mais
-amplos (incluindo end-to-end), estados vazios, tratamento de erros, documentação final, backup
-e restauração.
+Esta foi a última fase planejada (1 a 12). Veja a seção "Fase 12" abaixo para o que foi
+concluído e o manual do usuário completo, incluído neste repositório.
 
-Não inicie esta fase automaticamente — aguarde autorização.
+---
+
+# Fase 12 — Exportações, auditoria e acabamento
+
+## O que foi entregue
+
+### Exportações (CSV, Excel e PDF)
+
+Todas as exigem a permissão **`exportar_relatorios`** (nova nesta fase — o administrador
+concede pela tela de Usuários e permissões) e ficam registradas na Auditoria.
+
+- **Contas a pagar / Contas a receber** — botões "Exportar CSV" / "Exportar Excel" no topo da
+  lista, respeitando os filtros de busca e status que estiverem ativos na tela.
+- **Fluxo de caixa realizado** — CSV/Excel com o período filtrado; o Excel traz duas abas
+  (Resumo com saldo inicial/entradas/saídas/saldo final, e Movimentos detalhados).
+- **Transferências** — CSV/Excel com o histórico completo (a tela mostra só as 100 mais
+  recentes; a exportação não tem esse limite).
+- **DRE gerencial** — CSV e **PDF** formatado (mesmo estilo visual do recibo de aluguel, com
+  paginação automática). Usa exatamente as mesmas funções de cálculo da tela — a regra de
+  "distribuição de lucros nunca entra no resultado operacional" foi extraída para
+  `lib/finance/dre-socios.ts` nesta fase, compartilhada entre tela e exportação, para nunca
+  haver dois números diferentes para a mesma DRE.
+- **Backup completo** — em Configurações, um botão gera uma planilha Excel com uma aba por
+  tabela (lançamentos, liquidações, transferências, todos os cadastros, recibos etc.).
+  Restrito a administradores.
+
+### Auditoria
+
+- Nova tela **Auditoria** (menu Administração), com filtros por entidade, ação e período, e
+  paginação. Exige a permissão `visualizar_logs`.
+- A tabela `audit_logs` já existia desde a Fase 1; nesta fase o registro passou a ser
+  **usado de fato**: 18 Server Actions em todo o sistema (lançamentos, liquidações, estornos,
+  cancelamentos, parcelamentos, recorrências, transferências, conciliação, importação OFX,
+  recibos, cadastros, configurações, relatórios, permissões) agora gravam quem fez o quê e
+  quando, via `lib/audit/index.ts`.
+- Dados sensíveis (senhas, tokens, chaves de API) nunca são gravados em log — há uma
+  higienização automática (`lib/audit/sanitize.ts`) que os substitui por `"[removido]"` antes
+  de persistir, em qualquer nível de profundidade do objeto.
+- Os logs são **imutáveis**: a migration desta fase revoga UPDATE/DELETE da role
+  `authenticated` na tabela `audit_logs` — nem a aplicação nem um bug futuro conseguem
+  apagar ou alterar um registro já gravado.
+
+### Usuários e permissões
+
+Item que ficava desabilitado no menu desde a Fase 1 — agora funciona:
+
+- Lista todos os usuários da organização, com papel (Administrador/Operador) e situação
+  (ativo/inativo).
+- Administrador consegue **ativar/desativar** operadores (sem excluir — o histórico de quem
+  criou o quê é preservado).
+- Para cada operador, o administrador ajusta permissões individuais: **Padrão do papel**
+  (segue o que o papel Operador concede), **Conceder** (dá acesso além do padrão) ou
+  **Revogar** (tira um acesso que o papel concederia). Tudo fica registrado na Auditoria.
+- Administradores sempre têm acesso total (regra que já existia desde a Fase 1 na função
+  `has_permission()` do banco) — por isso não aparecem ajustes individuais para eles.
+- Criar um novo usuário continua sendo feito pelo painel do Supabase (Authentication → Users),
+  como descrito na seção 4 deste README — não há criação de usuário pela interface do sistema
+  nesta fase.
+
+### Revisão de permissões e RLS
+
+- Revisão completa das 9 migrations: todas as 27 tabelas do sistema têm Row Level Security
+  habilitado, com políticas consistentes (leitura restrita à própria organização ou catálogo
+  global somente leitura; escrita condicionada a `has_permission()` ou papel `admin`).
+- Duas permissões que o código já exigia desde a Fase 2 (`alterar_centros_de_custo` e
+  `alterar_formas_pagamento`) não estavam no catálogo semeado — corrigido na migration desta
+  fase. Não afeta administradores (que sempre têm tudo); operadores agora podem recebê-las
+  explicitamente pela tela de Usuários e permissões.
+
+### Tratamento de erros e estados vazios
+
+- Tela de erro amigável para falhas dentro da área logada (`app/(app)/error.tsx`) — nunca
+  mostra stack trace ao usuário, oferece "Tentar novamente" e "Ir para o Dashboard".
+- Tela de erro global (`app/global-error.tsx`) para falhas no próprio layout raiz.
+- Página 404 personalizada (`app/not-found.tsx`).
+- Estados vazios já existiam na maioria das telas desde as fases anteriores (ex.: "Nenhum
+  lançamento encontrado", "Nenhuma transferência registrada"); esta fase adicionou os que
+  faltavam (Auditoria, Usuários) e manteve o padrão visual consistente.
+
+### Correção herdada da Fase 11
+
+A validação da tela de Relatórios (`saveReportConfigAction`) tratava `formData.get()` retornando
+`null` para campos ausentes (o relatório semanal não envia `day_of_month` e vice-versa) como erro
+de "Dados inválidos". Corrigido nesta fase: os campos ausentes agora viram string vazia antes de
+passar pelo schema Zod, igual ao que já era feito no restante do sistema.
+
+### Testes
+
+21 testes novos (total do projeto: **116 testes**, todos passando):
+- `tests/fase12-export.test.ts` — escapamento de CSV (separador `;`, aspas, quebras de linha),
+  formatação de datas/números no padrão brasileiro, e as linhas exportadas da DRE (incluindo o
+  teste de que a distribuição de lucros nunca afeta o resultado operacional).
+- `tests/fase12-audit.test.ts` — higienização de dados sensíveis, truncamento de strings
+  longas, limite de profundidade de objetos.
+- `tests/fase12-xlsx-pdf.test.ts` — geração de PDF válido (com paginação), geração de planilha
+  Excel com roundtrip de leitura (confirma que os valores gravados são os valores lidos de
+  volta), e sanitização de nomes de aba inválidos.
+
+## Como testar
+
+1. Rode a migration `0009_exportacoes_auditoria_acabamento.sql` (seção 3 acima).
+2. Como administrador, acesse **Usuários e permissões** e conceda `Exportar relatórios` a um
+   operador de teste (se quiser testar com esse papel).
+3. Em **Contas a pagar**, clique em "Exportar CSV" — confirme que o arquivo abre corretamente
+   no Excel com acentuação correta e os valores nas colunas certas.
+4. Em **DRE gerencial**, clique em "Exportar PDF" — confirme que o documento abre, mostra o
+   cabeçalho com o nome do DECK 03 e os valores batem com a tela.
+5. Em **Configurações**, clique em "Gerar backup completo" — confirme que o Excel baixado tem
+   uma aba para cada tabela principal.
+6. Acesse **Auditoria** — confirme que as ações do passo 3 e 5 aparecem na lista. Filtre por
+   entidade "Exportação".
+7. Em **Usuários e permissões**, desative um usuário de teste — confirme que ele não consegue
+   mais fazer login (tentando acessar com a conta desativada, se tiver uma para testar).
+8. Force um erro (ex.: acesse uma URL inexistente como `/pagina-que-nao-existe`) — confirme
+   que aparece a tela 404 personalizada, não um erro técnico do Next.js.
+
+## Critérios de aceite
+
+✅ Exportações (CSV/Excel/PDF) disponíveis nas telas principais, respeitando filtros e permissões
+✅ DRE exportada usa exatamente as mesmas funções de cálculo da tela (sem duplicação de regra)
+✅ Toda ação relevante do sistema é registrada em audit_logs, com dados sensíveis higienizados
+✅ Logs de auditoria são imutáveis (RLS + revogação de UPDATE/DELETE)
+✅ Administrador consegue gerenciar usuários e ajustar permissões individuais pela interface
+✅ Todas as 27 tabelas do sistema têm RLS habilitado e revisado
+✅ Erros técnicos nunca aparecem crus para o usuário (telas de erro amigáveis em todos os níveis)
+✅ Backup completo dos dados disponível em um clique, restrito a administradores
+✅ 116 testes automatizados passando, incluindo os 21 novos desta fase
+
+## Pendências / limitações conhecidas
+
+- A restauração de um backup é um procedimento manual (ver "Backup e restauração" no Manual do
+  Usuário, seção 10) — não há um botão de "restaurar" na interface. Restaurar dados de produção
+  é uma operação de risco alto o suficiente para justificar um passo manual e deliberado, em vez
+  de um botão que poderia ser clicado sem querer.
+- A exportação de PDF está disponível apenas para a DRE gerencial nesta fase (as demais telas
+  exportam em CSV/Excel). Um PDF de contas a pagar/receber pode ser adicionado depois, se surgir
+  a necessidade — a infraestrutura (`lib/export/pdf-report.ts`) já suporta qualquer relatório
+  tabular.
+- Criação de novos usuários continua sendo feita pelo painel do Supabase, não pela interface do
+  sistema (ver seção 4 deste README).
+- Testes automatizados desta fase cobrem a camada de lógica pura (formatação, geração de
+  arquivos, higienização) — não há testes end-to-end de navegador neste projeto; toda a
+  validação de fluxo completo é feita manualmente pelo roteiro "Como testar".
+
+## Todas as 12 fases planejadas foram entregues
+
+Este projeto está com o escopo completo implementado: fundação e autenticação, cadastros
+financeiros, lançamentos básicos e avançados, saldos e transferências, fluxo de caixa realizado
+e projetado, dashboard do CEO, DRE gerencial com comparação trimestral, importação OFX e
+conciliação bancária, recibos de aluguel, relatórios automáticos por e-mail, e agora
+exportações, auditoria completa e gestão de usuários.
+
+Veja o **Manual do Usuário** (`MANUAL-DO-USUARIO.md`, neste repositório) para um guia de uso
+completo do sistema, pensado para quem vai operar o DECK 03 Financeiro no dia a dia — sem
+jargão técnico.
+

@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { hasPermission } from "@/lib/permissions";
 import { Card } from "@/components/ui/card";
 import { PeriodFilter } from "./period-filter";
+import { ExportButtons } from "@/components/export-buttons";
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
@@ -24,6 +25,7 @@ export default async function FluxoDeCaixaRealizadoPage({
 }) {
   const supabase = createClient();
   const canSeePersonal = await hasPermission("visualizar_contas_pessoais");
+  const canExport = await hasPermission("exportar_relatorios");
 
   const today = new Date();
   const firstOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
@@ -100,7 +102,21 @@ export default async function FluxoDeCaixaRealizadoPage({
       </div>
 
       <Card>
-        <PeriodFilter from={from} to={to} includePersonal={includePersonal} canSeePersonal={canSeePersonal} />
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <PeriodFilter from={from} to={to} includePersonal={includePersonal} canSeePersonal={canSeePersonal} />
+          {canExport && (
+            <ExportButtons
+              options={(() => {
+                const qs = new URLSearchParams({ from, to });
+                if (includePersonal) qs.set("personal", "1");
+                return [
+                  { label: "Exportar CSV", href: `/api/export/fluxo-realizado?${qs.toString()}&format=csv` },
+                  { label: "Exportar Excel", href: `/api/export/fluxo-realizado?${qs.toString()}&format=xlsx` },
+                ];
+              })()}
+            />
+          )}
+        </div>
       </Card>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">

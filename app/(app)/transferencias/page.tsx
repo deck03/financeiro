@@ -3,6 +3,7 @@ import { hasPermission } from "@/lib/permissions";
 import { Card } from "@/components/ui/card";
 import { NewTransferForm } from "./new-transfer-form";
 import { TRANSFER_CLASSIFICATION_LABELS } from "@/lib/labels/transferencias";
+import { ExportButtons } from "@/components/export-buttons";
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
@@ -16,6 +17,7 @@ function formatDate(value: string) {
 export default async function TransferenciasPage() {
   const supabase = createClient();
   const canCreate = await hasPermission("criar_transferencias");
+  const canExport = await hasPermission("exportar_relatorios");
 
   const { data: bankAccounts } = await supabase
     .from("bank_accounts")
@@ -47,6 +49,16 @@ export default async function TransferenciasPage() {
           </div>
         )}
 
+        {canExport && (
+          <div className="mb-3 flex justify-end">
+            <ExportButtons
+              options={[
+                { label: "Exportar CSV", href: "/api/export/transferencias?format=csv" },
+                { label: "Exportar Excel", href: "/api/export/transferencias?format=xlsx" },
+              ]}
+            />
+          </div>
+        )}
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>

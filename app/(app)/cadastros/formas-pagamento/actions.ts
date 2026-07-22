@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { requirePermission } from "@/lib/permissions";
 import { paymentMethodSchema } from "@/lib/validation/formas-pagamento";
 import { revalidatePath } from "next/cache";
+import { logAudit } from "@/lib/audit";
 
 export type FormState = { error?: string; success?: boolean };
 
@@ -41,6 +42,7 @@ export async function createPaymentMethodAction(_prev: FormState, formData: Form
   });
 
   if (error) return { error: "Não foi possível criar a forma de pagamento." };
+  await logAudit({ action: "criar", entity: "payment_methods", newValue: { nome: parsed.data.name } });
   revalidatePath("/cadastros/formas-pagamento");
   return { success: true };
 }
@@ -50,5 +52,6 @@ export async function togglePaymentMethodStatusAction(id: string, currentStatus:
   const { supabase, userId } = await getOrgIdAndUser();
   const newStatus = currentStatus === "ativo" ? "inativo" : "ativo";
   await supabase.from("payment_methods").update({ status: newStatus, updated_by: userId }).eq("id", id);
+  await logAudit({ action: newStatus === "ativo" ? "ativar" : "desativar", entity: "payment_methods", entityId: id });
   revalidatePath("/cadastros/formas-pagamento");
 }

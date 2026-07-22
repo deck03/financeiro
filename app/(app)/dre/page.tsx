@@ -1,11 +1,13 @@
 import { createClient } from "@/lib/supabase/server";
+import { hasPermission } from "@/lib/permissions";
 import { Card } from "@/components/ui/card";
 import { DreFilter } from "./dre-filter";
 import { buildDRE } from "@/lib/finance/dre";
 import { fetchClassifiedItems, fetchPartnerTransfers, type Regime } from "@/lib/finance/dre-query";
 import { formatCurrency, formatDate, monthRange, quarterRange, toISODate } from "@/lib/finance/period";
-import { TRANSFER_CLASSIFICATION_LABELS, TRANSFER_CLASSIFICATION_SIGN } from "@/lib/labels/transferencias";
 import Link from "next/link";
+import { ExportButtons } from "@/components/export-buttons";
+import { mergeSociosLines } from "@/lib/finance/dre-socios";
 
 function DreLine({
   label,
@@ -57,6 +59,7 @@ export default async function DrePage({
   };
 }) {
   const supabase = createClient();
+  const canExport = await hasPermission("exportar_relatorios");
 
   const regime: Regime = searchParams.regime === "competencia" ? "competencia" : "caixa";
   const periodType = (searchParams.period as "mensal" | "trimestral" | "personalizado") || "mensal";
@@ -93,19 +96,12 @@ export default async function DrePage({
 
   const dre = buildDRE(items);
 
-  // Mescla transferências de sócio/pessoa física (Fase 4) na mesma seção
-  const transfersByClassification = new Map<string, number>();
-  for (const t of transfers) {
-    const sign = TRANSFER_CLASSIFICATION_SIGN[t.classification] ?? -1;
-    const label = TRANSFER_CLASSIFICATION_LABELS[t.classification] ?? t.classification;
-    transfersByClassification.set(label, (transfersByClassification.get(label) ?? 0) + sign * Number(t.amount));
-  }
-  const combinedSocios = new Map<string, number>();
-  for (const line of dre.movimentacoesSocios) combinedSocios.set(line.label, line.total);
-  for (const [label, total] of transfersByClassification) {
-    combinedSocios.set(label, (combinedSocios.get(label) ?? 0) + total);
-  }
-  const combinedSociosTotal = Array.from(combinedSocios.values()).reduce((a, b) => a + b, 0);
+  // Mescla transferências de sócio/pessoa física (Fase 4) na mesma seção.
+  // Regra extraída para lib/finance/dre-socios.ts na Fase 12, compartilhada
+  // com a exportação (/api/export/dre) — uma única implementação.
+  const socios = mergeSociosLines(dre, transfers);
+  const combinedSocios = new Map<string, number>(socios.lines.map((l) => [l.label, l.total]));
+  const combinedSociosTotal = socios.total;
 
   function detailHref(params: Record<string, string>) {
     const p = new URLSearchParams({ regime, from, to, ...params });
@@ -122,6 +118,19 @@ export default async function DrePage({
       </div>
 
       <Card>
+        {canExport && (
+          <div className="mb-3 flex justify-end">
+            <ExportButtons
+              options={(() => {
+                const qs = new URLSearchParams({ regime, from, to });
+                return [
+                  { label: "Exportar CSV", href: `/api/export/dre?${qs.toString()}&format=csv` },
+                  { label: "Exportar PDF", href: `/api/export/dre?${qs.toString()}&format=pdf` },
+                ];
+              })()}
+            />
+          </div>
+        )}
         <DreFilter
           regime={regime}
           periodType={periodType}

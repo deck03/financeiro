@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { requirePermission } from "@/lib/permissions";
 import { reconcileExistingSchema, reconcileNewEntrySchema } from "@/lib/validation/ofx";
 import { revalidatePath } from "next/cache";
+import { logAudit } from "@/lib/audit";
 
 export type FormState = { error?: string; success?: boolean };
 
@@ -38,6 +39,13 @@ export async function reconcileWithExistingEntryAction(_prev: FormState, formDat
   if (error) {
     return { error: error.message.includes("permissão") ? "Você não tem permissão para esta ação." : error.message };
   }
+
+  await logAudit({
+    action: "conciliar",
+    entity: "bank_transactions",
+    entityId: parsed.data.bank_transaction_id,
+    metadata: { modo: "vincular a lançamento existente", lancamento: parsed.data.entry_id },
+  });
 
   revalidatePath("/conciliacao");
   return { success: true };
@@ -85,6 +93,13 @@ export async function reconcileWithNewEntryAction(_prev: FormState, formData: Fo
     return { error: error.message.includes("permissão") ? "Você não tem permissão para esta ação." : "Não foi possível criar o lançamento." };
   }
 
+  await logAudit({
+    action: "conciliar",
+    entity: "bank_transactions",
+    entityId: parsed.data.bank_transaction_id,
+    metadata: { modo: "criar novo lançamento" },
+  });
+
   revalidatePath("/conciliacao");
   return { success: true };
 }
@@ -92,17 +107,20 @@ export async function reconcileWithNewEntryAction(_prev: FormState, formData: Fo
 export async function ignoreBankTransactionAction(bankTransactionId: string) {
   const supabase = await getSupabase();
   await supabase.rpc("ignore_bank_transaction", { p_bank_transaction_id: bankTransactionId });
+  await logAudit({ action: "ignorar", entity: "bank_transactions", entityId: bankTransactionId });
   revalidatePath("/conciliacao");
 }
 
 export async function unignoreBankTransactionAction(bankTransactionId: string) {
   const supabase = await getSupabase();
   await supabase.rpc("unignore_bank_transaction", { p_bank_transaction_id: bankTransactionId });
+  await logAudit({ action: "reativar", entity: "bank_transactions", entityId: bankTransactionId });
   revalidatePath("/conciliacao");
 }
 
 export async function undoReconciliationAction(bankTransactionId: string) {
   const supabase = await getSupabase();
   await supabase.rpc("undo_reconciliation", { p_bank_transaction_id: bankTransactionId });
+  await logAudit({ action: "desfazer_conciliacao", entity: "bank_transactions", entityId: bankTransactionId });
   revalidatePath("/conciliacao");
 }
