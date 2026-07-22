@@ -129,6 +129,12 @@ Essas classificações (exceto "Transferência interna") aparecem separadamente 
 Por padrão, contas de pessoa física não entram nesses números — só quem tem a permissão
 "Visualizar contas pessoais" consegue incluí-las, marcando a opção no filtro.
 
+> **Despesas pessoais pagas pela conta da empresa:** se um sócio usa a mesma conta bancária
+> empresarial para pagar uma despesa pessoal (sem transferir para outra conta), essa despesa
+> não deve entrar nas "Saídas" do Fluxo de Caixa Realizado — ela aparece separadamente, em
+> "Movimentações de sócios / pessoa física", desde que esteja categorizada corretamente no
+> plano de contas (veja a seção 16). O mesmo vale para o Dashboard.
+
 ## 8. DRE gerencial e comparação trimestral
 
 A **DRE (Demonstração de Resultado)** mostra se o DECK 03 está dando lucro ou prejuízo, de um
@@ -256,6 +262,12 @@ Base para os lançamentos:
   categoria define se entra no resultado operacional da DRE, se é financeira/investimento/outra,
   e como afeta o fluxo de caixa. É a fonte de verdade única — nunca precisa reconfigurar essa
   regra em mais de um lugar.
+
+  > Se a mesma conta bancária empresarial paga tanto despesas da empresa quanto despesas
+  > pessoais dos sócios, crie uma categoria específica para isso (natureza gerencial "Pessoa
+  > física", comportamento na DRE "Não incluir"). Não é preciso ter uma conta bancária separada
+  > — o sistema já reconhece essa categoria e trata o valor como movimentação de sócios em
+  > todos os relatórios, mesmo saindo da conta empresarial.
 - **Centros de custo** — para saber em qual "área" cada despesa/receita pertence.
 - **Contas bancárias** — cadastre com a titularidade correta (empresarial ou pessoa física); só
   contas empresariais entram no dashboard e nos relatórios por padrão.

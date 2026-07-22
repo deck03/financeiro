@@ -3,6 +3,7 @@ import { hasPermission } from "@/lib/permissions";
 import { Card } from "@/components/ui/card";
 import { PeriodFilter } from "./period-filter";
 import { ExportButtons } from "@/components/export-buttons";
+import { splitRealizedItems, sumByCategory, sumAmounts, netSignedTotal } from "@/lib/finance/realized-split";
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
@@ -16,6 +17,17 @@ function dayBefore(isoDate: string) {
   const d = new Date(`${isoDate}T00:00:00`);
   d.setDate(d.getDate() - 1);
   return toISODate(d);
+}
+
+function mapSettlements(rows: any[]) {
+  return rows
+    .filter((s) => s.financial_entries)
+    .map((s) => ({
+      type: s.financial_entries.type as string,
+      amount: Number(s.amount),
+      categoryName: s.financial_entries.chart_account_categories?.name ?? "Sem categoria",
+      dreBehavior: s.financial_entries.chart_account_categories?.dre_behavior ?? "incluir_operacional",
+    }));
 }
 
 export default async function FluxoDeCaixaRealizadoPage({
@@ -56,40 +68,40 @@ export default async function FluxoDeCaixaRealizadoPage({
   const saldoInicial = initialBalances.reduce((sum, r) => sum + Number(r.data ?? 0), 0);
   const saldoFinal = finalBalances.reduce((sum, r) => sum + Number(r.data ?? 0), 0);
 
-  let entradas: any[] = [];
-  let saidas: any[] = [];
+  let realizedItems: ReturnType<typeof mapSettlements> = [];
 
   if (accountIds.length > 0) {
     const { data: settlements } = await supabase
       .from("financial_settlements")
       .select(
-        "amount, settlement_date, bank_account_id, financial_entries(type, category_id, chart_account_categories(name))"
+        "amount, settlement_date, bank_account_id, financial_entries(type, category_id, chart_account_categories(name, dre_behavior))"
       )
       .in("bank_account_id", accountIds)
       .eq("status", "valido")
       .gte("settlement_date", from)
       .lte("settlement_date", to);
 
-    entradas = (settlements ?? []).filter((s: any) => s.financial_entries?.type === "receita");
-    saidas = (settlements ?? []).filter((s: any) => s.financial_entries?.type === "despesa");
+    realizedItems = mapSettlements(settlements ?? []);
   }
 
-  const totalEntradas = entradas.reduce((sum, s) => sum + Number(s.amount), 0);
-  const totalSaidas = saidas.reduce((sum, s) => sum + Number(s.amount), 0);
+  // Mesma regra da DRE: categorias marcadas como "não incluir" são
+  // movimentações de sócios/pessoa física — mesmo quando pagas pela conta
+  // empresarial, não entram como entrada/saída do fluxo de caixa da
+  // empresa. Ficam à parte, em linha própria, para o saldo continuar
+  // fazendo sentido sem esconder nenhum valor.
+  const { operational, partners } = splitRealizedItems(realizedItems);
+  const entradas = operational.filter((i) => i.type === "receita");
+  const saidas = operational.filter((i) => i.type === "despesa");
 
-  function groupByCategory(items: any[]) {
-    const map = new Map<string, number>();
-    for (const item of items) {
-      const name = item.financial_entries?.chart_account_categories?.name ?? "Sem categoria";
-      map.set(name, (map.get(name) ?? 0) + Number(item.amount));
-    }
-    return Array.from(map.entries())
-      .map(([name, total]) => ({ name, total }))
-      .sort((a, b) => b.total - a.total);
-  }
+  const totalEntradas = sumAmounts(entradas);
+  const totalSaidas = sumAmounts(saidas);
+  const totalSocios = netSignedTotal(partners);
 
-  const entradasPorCategoria = groupByCategory(entradas);
-  const saidasPorCategoria = groupByCategory(saidas);
+  const entradasPorCategoria = sumByCategory(entradas);
+  const saidasPorCategoria = sumByCategory(saidas);
+  const sociosPorCategoria = sumByCategory(
+    partners.map((p) => ({ ...p, amount: p.type === "receita" ? p.amount : -p.amount }))
+  );
 
   return (
     <div className="space-y-6">
@@ -97,7 +109,8 @@ export default async function FluxoDeCaixaRealizadoPage({
         <h1 className="text-xl font-semibold text-ink">Fluxo de caixa realizado</h1>
         <p className="text-sm text-ink-soft">
           Apenas valores efetivamente pagos ou recebidos no período. Transferências não entram
-          como entrada ou saída.
+          como entrada ou saída, e despesas/receitas de sócios ou pessoa física — mesmo pagas
+          pela conta empresarial — aparecem à parte, não nas Entradas/Saídas.
         </p>
       </div>
 
@@ -137,6 +150,31 @@ export default async function FluxoDeCaixaRealizadoPage({
           <p className="num mt-1 text-lg font-semibold text-ink">{formatCurrency(saldoFinal)}</p>
         </div>
       </div>
+
+      {partners.length > 0 && (
+        <div className="rounded-card border border-base-border bg-base-surface p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-ink">Movimentações de sócios / pessoa física</p>
+              <p className="mt-0.5 text-xs text-ink-faint">
+                Pagas ou recebidas pelas mesmas contas, mas fora do fluxo de caixa da empresa —
+                por isso não entram em Entradas/Saídas acima. Mesma regra usada na DRE.
+              </p>
+            </div>
+            <p className={`num text-lg font-semibold ${totalSocios >= 0 ? "text-signal-positive" : "text-signal-negative"}`}>
+              {formatCurrency(totalSocios)}
+            </p>
+          </div>
+          <ul className="mt-3 space-y-2 border-t border-base-border pt-3">
+            {sociosPorCategoria.map((c) => (
+              <li key={c.name} className="flex items-center justify-between text-sm">
+                <span className="text-ink-soft">{c.name}</span>
+                <span className="num text-ink">{formatCurrency(c.total)}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
         <Card>

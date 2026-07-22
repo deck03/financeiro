@@ -1524,3 +1524,80 @@ Veja o **Manual do Usuário** (`MANUAL-DO-USUARIO.md`, neste repositório) para 
 completo do sistema, pensado para quem vai operar o DECK 03 Financeiro no dia a dia — sem
 jargão técnico.
 
+---
+
+# Ajuste pós-Fase 12 — sócios/pessoa física pagos pela mesma conta empresarial
+
+## Contexto
+
+Depois da Fase 12, foi esclarecido um ponto importante sobre como o DECK 03 opera na prática:
+**não existem, necessariamente, contas bancárias separadas por titularidade** — a mesma conta
+empresarial é usada tanto para pagar despesas da empresa (PJ) quanto despesas pessoais dos
+sócios (PF).
+
+O campo `ownership` em `bank_accounts` (empresarial/pessoa física) já existia desde a Fase 2,
+mas ele resolve apenas o caso de uma conta ser *inteiramente* de um tipo ou outro. Ele não
+ajuda quando uma única conta mistura os dois.
+
+## O que já funcionava corretamente
+
+A separação PJ/PF **não depende da conta bancária usada no pagamento** — ela é feita pela
+**categoria do plano de contas** (campo `dre_behavior`, existente desde a Fase 2). Uma
+categoria com `dre_behavior = 'nao_incluir'` (natureza gerencial "Pessoa física" ou "Movimentação
+de sócios") já era excluída do resultado operacional da DRE e já aparecia corretamente na seção
+"Movimentações de sócios", **independentemente de qual conta bancária pagou**. Ou seja, a **DRE
+já estava certa** mesmo com uma única conta compartilhada.
+
+## O que foi corrigido
+
+Duas telas somavam entradas/saídas apenas olhando para a conta bancária usada, sem checar a
+categoria — então uma despesa pessoal paga pela conta empresarial inflava indevidamente os
+números "da empresa":
+
+- **Fluxo de caixa realizado** — agora separa, dentro do mesmo período e das mesmas contas, o
+  que é movimentação operacional (entra em Entradas/Saídas) do que é movimentação de
+  sócios/pessoa física (mostrado em uma seção própria, "Movimentações de sócios / pessoa
+  física", com o total líquido e a composição por categoria). A exportação (CSV/Excel) segue a
+  mesma regra, com uma coluna "Classificação" em cada movimento e uma linha própria no resumo.
+- **Dashboard** — "Receita do mês", "Despesa do mês", "Maiores entradas/saídas" e "Despesas/
+  Receitas por categoria" agora excluem itens de sócios/pessoa física. Quando há movimentação
+  desse tipo no mês, aparece uma nota abaixo dos indicadores informando o valor não incluído
+  (com link implícito para a DRE, onde a movimentação de sócios já era exibida corretamente).
+  O "Resultado operacional preliminar" não mudou — já usava a mesma regra da DRE desde a
+  Fase 7.
+
+A lógica de separação foi centralizada em `lib/finance/realized-split.ts` (funções puras,
+testadas), reaproveitada pelas três telas — a mesma regra de "o que é sócio/PF" nunca precisa
+ser reimplementada duas vezes.
+
+## Como usar na prática
+
+Para registrar uma despesa pessoal paga pela conta empresarial:
+
+1. Garanta que existe, no **Plano de contas**, uma categoria com natureza gerencial "Pessoa
+   física" (ou "Movimentação de sócios") e comportamento na DRE "Não incluir" — se ainda não
+   existir, crie uma (ex.: família "Sócios", categoria "Despesas pessoais").
+2. Registre a despesa normalmente em **Contas a pagar**, usando essa categoria.
+3. Ao liquidar, use a conta bancária empresarial normalmente — não precisa de nenhuma conta
+   separada.
+
+O sistema cuida do resto: a DRE, o Fluxo de Caixa Realizado, o Dashboard e as exportações
+tratam esse valor como movimentação de sócios/pessoa física, não como despesa operacional da
+empresa — mesmo saindo fisicamente da conta empresarial.
+
+## Testes
+
+7 testes novos em `tests/fase12-fix-socios-fluxo.test.ts`, incluindo o caso central: uma
+despesa pessoal categorizada corretamente, mesmo paga pela conta empresarial, não aumenta o
+total de saídas operacionais do fluxo de caixa (123 testes no total, todos passando).
+
+## O que não mudou (por design)
+
+- **Transferências** continuam sendo o mecanismo indicado quando o dinheiro sai da conta
+  empresarial em direção a outra conta bancária cadastrada (ex.: uma retirada para uma conta
+  pessoal que também existe no sistema) — usando as classificações já existentes desde a
+  Fase 4 (distribuição de lucros, retirada de sócio, aporte etc.).
+- O ajuste desta seção cobre o outro caso: quando **não há uma segunda conta envolvida** — a
+  despesa pessoal é paga diretamente da conta empresarial, sem transferência nenhuma, e por
+  isso precisa ser um lançamento categorizado, não uma transferência.
+

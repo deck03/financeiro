@@ -6,6 +6,7 @@ import { toCsv } from "@/lib/export/csv";
 import { buildWorkbook, type SheetSpec } from "@/lib/export/xlsx";
 import { formatDateBR, formatNumberBR, exportFileName } from "@/lib/export/format";
 import { fileResponse, XLSX_MIME, CSV_MIME } from "@/lib/export/response";
+import { netSignedTotal, sumAmounts } from "@/lib/finance/realized-split";
 
 export const dynamic = "force-dynamic";
 
@@ -69,7 +70,7 @@ export async function GET(request: NextRequest) {
     const { data: settlements } = await supabase
       .from("financial_settlements")
       .select(
-        "amount, settlement_date, bank_accounts(display_name), financial_entries(type, description, counterparties(name), chart_account_categories(name))"
+        "amount, settlement_date, bank_accounts(display_name), financial_entries(type, description, counterparties(name), chart_account_categories(name, dre_behavior))"
       )
       .in("bank_account_id", accountIds)
       .eq("status", "valido")
@@ -79,26 +80,41 @@ export async function GET(request: NextRequest) {
     movimentos = (settlements ?? []).filter((s: any) => s.financial_entries);
   }
 
-  const totalEntradas = movimentos
-    .filter((s) => s.financial_entries.type === "receita")
-    .reduce((sum, s) => sum + Number(s.amount), 0);
-  const totalSaidas = movimentos
-    .filter((s) => s.financial_entries.type === "despesa")
-    .reduce((sum, s) => sum + Number(s.amount), 0);
+  // Mesma regra da DRE: categorias "não incluir" são movimentações de
+  // sócios/pessoa física — mesmo pagas pela conta empresarial, ficam fora
+  // de Entradas/Saídas e aparecem em linha própria no resumo.
+  const isPartnerItem = (s: any) => s.financial_entries.chart_account_categories?.dre_behavior === "nao_incluir";
+  const operacionais = movimentos.filter((s) => !isPartnerItem(s));
+  const socios = movimentos.filter(isPartnerItem);
+
+  const totalEntradas = sumAmounts(operacionais.filter((s) => s.financial_entries.type === "receita").map((s) => ({ amount: Number(s.amount) })));
+  const totalSaidas = sumAmounts(operacionais.filter((s) => s.financial_entries.type === "despesa").map((s) => ({ amount: Number(s.amount) })));
+  const totalSocios = netSignedTotal(socios.map((s) => ({ type: s.financial_entries.type, amount: Number(s.amount) })));
 
   const resumoHeaders = ["Indicador", "Valor (R$)"];
   const resumoRows: Array<[string, number]> = [
     [`Saldo inicial (${formatDateBR(from)})`, saldoInicial],
     ["Entradas no período", totalEntradas],
     ["Saídas no período", totalSaidas],
+    ["Movimentações de sócios/pessoa física (líquido, fora do fluxo empresarial)", totalSocios],
     [`Saldo final (${formatDateBR(to)})`, saldoFinal],
   ];
 
-  const movHeaders = ["Data", "Tipo", "Descrição", "Contraparte", "Categoria", "Conta bancária", "Valor (R$)"];
+  const movHeaders = [
+    "Data",
+    "Tipo",
+    "Classificação",
+    "Descrição",
+    "Contraparte",
+    "Categoria",
+    "Conta bancária",
+    "Valor (R$)",
+  ];
   const movRows = movimentos.map((s: any) => ({
     text: [
       formatDateBR(s.settlement_date),
       s.financial_entries.type === "receita" ? "Entrada" : "Saída",
+      isPartnerItem(s) ? "Sócios/pessoa física" : "Operacional",
       s.financial_entries.description ?? "",
       s.financial_entries.counterparties?.name ?? "",
       s.financial_entries.chart_account_categories?.name ?? "",
@@ -125,7 +141,7 @@ export async function GET(request: NextRequest) {
         name: "Movimentos",
         headers: movHeaders,
         rows: movRows.map((r) => [...r.text, r.amount]),
-        currencyColumns: [6],
+        currencyColumns: [7],
       },
     ];
     const bytes = await buildWorkbook(sheets);

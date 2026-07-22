@@ -4,6 +4,7 @@ import { Card } from "@/components/ui/card";
 import { MetricCard } from "@/components/dashboard/metric-card";
 import { AlertItem } from "@/components/dashboard/alert-item";
 import { computeCashflowProjection, addDays } from "@/lib/finance/projection-query";
+import { splitRealizedItems, sumByCategory, sumAmounts, netSignedTotal } from "@/lib/finance/realized-split";
 import Link from "next/link";
 
 const OPEN_STATUSES_PAYABLE = ["em_aberto", "agendado", "parcialmente_pago"];
@@ -173,6 +174,7 @@ export default async function DashboardPage() {
   let operatingResult = 0;
   let expensesByCategory: { name: string; total: number }[] = [];
   let revenueByCategory: { name: string; total: number }[] = [];
+  let partnersMonthTotal = 0;
   let prevMonthRevenue = 0;
   let prevMonthExpense = 0;
 
@@ -186,36 +188,40 @@ export default async function DashboardPage() {
       .gte("settlement_date", monthStartISO)
       .lte("settlement_date", todayISO);
 
-    const inflows = (monthSettlements ?? []).filter((s: any) => s.financial_entries?.type === "receita");
-    const outflows = (monthSettlements ?? []).filter((s: any) => s.financial_entries?.type === "despesa");
+    // Mesma regra da DRE: categorias "não incluir" são movimentações de
+    // sócios/pessoa física — mesmo pagas por uma conta empresarial, não
+    // entram como receita/despesa "da empresa" nos cartões abaixo.
+    const normalized = (monthSettlements ?? [])
+      .filter((s: any) => s.financial_entries)
+      .map((s: any) => ({
+        raw: s,
+        type: s.financial_entries.type as string,
+        amount: Number(s.amount),
+        categoryName: s.financial_entries.chart_account_categories?.name ?? "Sem categoria",
+        dreBehavior: s.financial_entries.chart_account_categories?.dre_behavior ?? "incluir_operacional",
+      }));
+    const { operational, partners } = splitRealizedItems(normalized);
 
-    monthRevenue = inflows.reduce((sum: number, s: any) => sum + Number(s.amount), 0);
-    monthExpense = outflows.reduce((sum: number, s: any) => sum + Number(s.amount), 0);
+    const inflows = operational.filter((i) => i.type === "receita");
+    const outflows = operational.filter((i) => i.type === "despesa");
+
+    monthRevenue = sumAmounts(inflows);
+    monthExpense = sumAmounts(outflows);
+    partnersMonthTotal = netSignedTotal(partners);
 
     const operatingRevenue = inflows
-      .filter((s: any) => s.financial_entries?.chart_account_categories?.dre_behavior === "incluir_operacional")
-      .reduce((sum: number, s: any) => sum + Number(s.amount), 0);
+      .filter((i) => i.dreBehavior === "incluir_operacional")
+      .reduce((sum, i) => sum + i.amount, 0);
     const operatingExpense = outflows
-      .filter((s: any) => s.financial_entries?.chart_account_categories?.dre_behavior === "incluir_operacional")
-      .reduce((sum: number, s: any) => sum + Number(s.amount), 0);
+      .filter((i) => i.dreBehavior === "incluir_operacional")
+      .reduce((sum, i) => sum + i.amount, 0);
     operatingResult = operatingRevenue - operatingExpense;
 
-    topInflows = [...inflows].sort((a: any, b: any) => Number(b.amount) - Number(a.amount)).slice(0, 5);
-    topOutflows = [...outflows].sort((a: any, b: any) => Number(b.amount) - Number(a.amount)).slice(0, 5);
+    topInflows = [...inflows].sort((a, b) => b.amount - a.amount).slice(0, 5).map((i) => i.raw);
+    topOutflows = [...outflows].sort((a, b) => b.amount - a.amount).slice(0, 5).map((i) => i.raw);
 
-    function groupByCategory(items: any[]) {
-      const map = new Map<string, number>();
-      for (const item of items) {
-        const name = item.financial_entries?.chart_account_categories?.name ?? "Sem categoria";
-        map.set(name, (map.get(name) ?? 0) + Number(item.amount));
-      }
-      return Array.from(map.entries())
-        .map(([name, total]) => ({ name, total }))
-        .sort((a, b) => b.total - a.total)
-        .slice(0, 5);
-    }
-    expensesByCategory = groupByCategory(outflows);
-    revenueByCategory = groupByCategory(inflows);
+    expensesByCategory = sumByCategory(outflows, 5);
+    revenueByCategory = sumByCategory(inflows, 5);
 
     const { data: prevMonthSettlements } = await supabase
       .from("financial_settlements")
@@ -466,6 +472,14 @@ export default async function DashboardPage() {
               href="/dre"
             />
           </div>
+
+          {partnersMonthTotal !== 0 && (
+            <p className="text-xs text-ink-faint">
+              Não incluído acima: {formatCurrency(Math.abs(partnersMonthTotal))} em movimentações de
+              sócios/pessoa física este mês (pagas ou recebidas pelas contas da empresa, mas fora do
+              resultado operacional — veja a DRE).
+            </p>
+          )}
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Card>
