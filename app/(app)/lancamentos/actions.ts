@@ -278,22 +278,28 @@ export async function createInstallmentPlanAction(_prev: FormState, formData: Fo
     return { error: "Você não tem permissão para criar lançamentos." };
   }
 
+  // formData.get() retorna null (não undefined) para campos que não
+  // existem no formulário — o formulário de parcelamento não tem campos de
+  // subcategoria/forma de pagamento, e campos opcionais com z.optional()
+  // só aceitam undefined, não null. Sem o "?? ''" abaixo, isso quebra a
+  // validação com o erro genérico "Invalid input" (mesma causa-raiz do
+  // ajuste já feito em relatórios na Fase 11).
   const parsed = installmentPlanSchema.safeParse({
     type: formData.get("type"),
     description: formData.get("description"),
-    counterparty_id: formData.get("counterparty_id"),
+    counterparty_id: formData.get("counterparty_id") ?? "",
     category_id: formData.get("category_id"),
-    subcategory_id: formData.get("subcategory_id"),
-    cost_center_id: formData.get("cost_center_id"),
-    bank_account_id: formData.get("bank_account_id"),
-    payment_method_id: formData.get("payment_method_id"),
+    subcategory_id: formData.get("subcategory_id") ?? "",
+    cost_center_id: formData.get("cost_center_id") ?? "",
+    bank_account_id: formData.get("bank_account_id") ?? "",
+    payment_method_id: formData.get("payment_method_id") ?? "",
     total_amount: formData.get("total_amount"),
     installments_count: formData.get("installments_count"),
     first_due_date: formData.get("first_due_date"),
     recognition_strategy: formData.get("recognition_strategy"),
-    competence_date: formData.get("competence_date"),
-    document_number: formData.get("document_number"),
-    notes: formData.get("notes"),
+    competence_date: formData.get("competence_date") ?? "",
+    document_number: formData.get("document_number") ?? "",
+    notes: formData.get("notes") ?? "",
   });
 
   if (!parsed.success) {
@@ -352,23 +358,28 @@ export async function createRecurringRuleAction(_prev: FormState, formData: Form
     return { error: "Você não tem permissão para criar lançamentos." };
   }
 
+  // Mesma causa-raiz do ajuste em relatórios (Fase 11) e do parcelamento
+  // acima: formData.get() retorna null para campos ausentes do formulário
+  // (aqui, subcategoria e forma de pagamento), o que quebra campos
+  // opcionais do Zod (que só aceitam undefined, não null) com o erro
+  // genérico "Invalid input".
   const parsed = recurringRuleSchema.safeParse({
     type: formData.get("type"),
     description: formData.get("description"),
-    counterparty_id: formData.get("counterparty_id"),
+    counterparty_id: formData.get("counterparty_id") ?? "",
     category_id: formData.get("category_id"),
-    subcategory_id: formData.get("subcategory_id"),
-    cost_center_id: formData.get("cost_center_id"),
-    bank_account_id: formData.get("bank_account_id"),
-    payment_method_id: formData.get("payment_method_id"),
+    subcategory_id: formData.get("subcategory_id") ?? "",
+    cost_center_id: formData.get("cost_center_id") ?? "",
+    bank_account_id: formData.get("bank_account_id") ?? "",
+    payment_method_id: formData.get("payment_method_id") ?? "",
     amount: formData.get("amount"),
     frequency: formData.get("frequency"),
     interval_count: formData.get("interval_count") || "1",
+    end_date: formData.get("end_date") ?? "",
     start_date: formData.get("start_date"),
-    end_date: formData.get("end_date"),
     max_occurrences: formData.get("max_occurrences") || "",
     adjust_business_day: formData.get("adjust_business_day") === "on",
-    competence_anchor_date: formData.get("competence_anchor_date"),
+    competence_anchor_date: formData.get("competence_anchor_date") ?? "",
   });
 
   if (!parsed.success) {

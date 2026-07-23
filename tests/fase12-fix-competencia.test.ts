@@ -63,3 +63,46 @@ describe("Ajuste — âncora de competência em recorrências", () => {
     expect(result.success).toBe(true);
   });
 });
+
+describe("Correção — 'Invalid input' em parcelamento/recorrência (subcategoria e forma de pagamento ausentes do formulário)", () => {
+  // Os formulários de parcelamento e recorrência não têm campos de
+  // subcategoria/forma de pagamento. formData.get() retorna null (não
+  // undefined) para um campo inexistente, e z.string().optional() só aceita
+  // undefined — por isso a action precisa converter null em "" antes de
+  // validar. Estes testes documentam o comportamento em ambos os lados.
+  it("REPRODUZ o bug: subcategory_id/payment_method_id como null (campo ausente do formulário) falha", () => {
+    const result = installmentPlanSchema.safeParse({
+      ...baseInstallment,
+      recognition_strategy: "por_parcela",
+      subcategory_id: null,
+      payment_method_id: null,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("CORRIGE: convertendo null para string vazia antes de validar, a mesma entrada passa", () => {
+    const result = installmentPlanSchema.safeParse({
+      ...baseInstallment,
+      recognition_strategy: "por_parcela",
+      subcategory_id: null ?? "",
+      payment_method_id: null ?? "",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("o mesmo vale para o formulário de recorrência", () => {
+    const comNull = recurringRuleSchema.safeParse({
+      ...baseRecurring,
+      subcategory_id: null,
+      payment_method_id: null,
+    });
+    expect(comNull.success).toBe(false);
+
+    const comFallback = recurringRuleSchema.safeParse({
+      ...baseRecurring,
+      subcategory_id: null ?? "",
+      payment_method_id: null ?? "",
+    });
+    expect(comFallback.success).toBe(true);
+  });
+});

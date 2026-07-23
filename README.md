@@ -1657,3 +1657,19 @@ mudança de comportamento para dados/registros já existentes.
 obrigatória apenas quando o reconhecimento é "competencia_original"; âncora de competência
 opcional na recorrência). Total do projeto: 128 testes, todos passando.
 
+## Correção — erro "Invalid input" ao criar parcelamento ou recorrência
+
+Depois do ajuste acima, os formulários de **Parcelamento** e **Recorrência** passaram a falhar
+com o erro genérico "Invalid input" ao serem enviados. Causa raiz: nenhum dos dois formulários
+tem campos de subcategoria ou forma de pagamento — mas os schemas de validação esperavam esses
+campos como opcionais. `formData.get()` retorna `null` (não `undefined`) para um campo que não
+existe no formulário, e `z.string().optional()` do Zod só aceita `undefined`, não `null` — a
+combinação gera um erro de validação de união (`invalid_union`), cuja mensagem padrão é
+justamente "Invalid input". Essa é a mesma causa-raiz já corrigida em Relatórios na Fase 11, só
+que não tinha sido pega nesses dois formulários porque eles simplesmente nunca tiveram esses
+dois campos.
+
+Corrigido convertendo `null` em string vazia (`?? ""`) antes de validar, nas duas actions
+(`createInstallmentPlanAction` e `createRecurringRuleAction`). 3 testes novos reproduzem o bug
+e confirmam a correção (131 testes no total). Sem mudança de banco de dados — é só código.
+
