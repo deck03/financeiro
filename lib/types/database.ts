@@ -714,6 +714,7 @@ export type Database = {
           total_amount: number;
           installments_count: number;
           recognition_strategy: string;
+          single_competence_date: string | null;
           created_at: string;
           created_by: string | null;
         };
@@ -724,6 +725,7 @@ export type Database = {
           total_amount: number;
           installments_count: number;
           recognition_strategy?: string;
+          single_competence_date?: string | null;
           created_at?: string;
           created_by?: string | null;
         };
@@ -734,6 +736,7 @@ export type Database = {
           total_amount?: number;
           installments_count?: number;
           recognition_strategy?: string;
+          single_competence_date?: string | null;
           created_at?: string;
           created_by?: string | null;
         };
@@ -758,6 +761,7 @@ export type Database = {
           end_date: string | null;
           max_occurrences: number | null;
           adjust_business_day: boolean;
+          competence_anchor_date: string | null;
           status: string;
           created_at: string;
           updated_at: string;
@@ -782,6 +786,7 @@ export type Database = {
           end_date?: string | null;
           max_occurrences?: number | null;
           adjust_business_day?: boolean;
+          competence_anchor_date?: string | null;
           status?: string;
           created_at?: string;
           updated_at?: string;
@@ -806,6 +811,7 @@ export type Database = {
           end_date?: string | null;
           max_occurrences?: number | null;
           adjust_business_day?: boolean;
+          competence_anchor_date?: string | null;
           status?: string;
           created_at?: string;
           updated_at?: string;
@@ -1337,6 +1343,7 @@ export type Database = {
           p_recognition_strategy?: string;
           p_document_number?: string | null;
           p_notes?: string | null;
+          p_competence_date?: string | null;
         };
         Returns: string;
       };

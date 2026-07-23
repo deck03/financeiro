@@ -291,6 +291,7 @@ export async function createInstallmentPlanAction(_prev: FormState, formData: Fo
     installments_count: formData.get("installments_count"),
     first_due_date: formData.get("first_due_date"),
     recognition_strategy: formData.get("recognition_strategy"),
+    competence_date: formData.get("competence_date"),
     document_number: formData.get("document_number"),
     notes: formData.get("notes"),
   });
@@ -317,6 +318,7 @@ export async function createInstallmentPlanAction(_prev: FormState, formData: Fo
     p_recognition_strategy: data.recognition_strategy,
     p_document_number: emptyToNull(data.document_number),
     p_notes: emptyToNull(data.notes),
+    p_competence_date: emptyToNull(data.competence_date),
   });
 
   if (error) {
@@ -331,6 +333,8 @@ export async function createInstallmentPlanAction(_prev: FormState, formData: Fo
       descricao: data.description,
       valorTotal: data.total_amount,
       parcelas: data.installments_count,
+      reconhecimento: data.recognition_strategy,
+      dataCompetencia: data.recognition_strategy === "competencia_original" ? data.competence_date : null,
     },
   });
 
@@ -364,6 +368,7 @@ export async function createRecurringRuleAction(_prev: FormState, formData: Form
     end_date: formData.get("end_date"),
     max_occurrences: formData.get("max_occurrences") || "",
     adjust_business_day: formData.get("adjust_business_day") === "on",
+    competence_anchor_date: formData.get("competence_anchor_date"),
   });
 
   if (!parsed.success) {
@@ -392,6 +397,7 @@ export async function createRecurringRuleAction(_prev: FormState, formData: Form
       end_date: emptyToNull(data.end_date),
       max_occurrences: data.max_occurrences && data.max_occurrences !== "" ? Number(data.max_occurrences) : null,
       adjust_business_day: data.adjust_business_day ?? false,
+      competence_anchor_date: emptyToNull(data.competence_anchor_date),
       created_by: userId,
       updated_by: userId,
     })
@@ -408,7 +414,13 @@ export async function createRecurringRuleAction(_prev: FormState, formData: Form
     action: "criar",
     entity: "recurring_rules",
     entityId: rule.id,
-    newValue: { tipo: data.type, descricao: data.description, valor: data.amount, frequencia: data.frequency },
+    newValue: {
+      tipo: data.type,
+      descricao: data.description,
+      valor: data.amount,
+      frequencia: data.frequency,
+      ancoraCompetencia: data.competence_anchor_date || null,
+    },
   });
 
   revalidatePath("/recorrencias");

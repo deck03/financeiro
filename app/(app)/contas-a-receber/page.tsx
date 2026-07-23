@@ -13,7 +13,7 @@ const OPEN_STATUSES = ["em_aberto", "agendado", "parcialmente_recebido"];
 export default async function ContasAReceberPage({
   searchParams,
 }: {
-  searchParams: { q?: string; status?: string };
+  searchParams: { q?: string; status?: string; from?: string; to?: string };
 }) {
   const supabase = createClient();
   const canCreate = await hasPermission("criar_lancamentos");
@@ -30,6 +30,12 @@ export default async function ContasAReceberPage({
 
   if (searchParams.q) {
     query = query.ilike("description", `%${searchParams.q}%`);
+  }
+  if (searchParams.from) {
+    query = query.gte("due_date", searchParams.from);
+  }
+  if (searchParams.to) {
+    query = query.lte("due_date", searchParams.to);
   }
   if (searchParams.status === "vencido") {
     query = query.in("status", OPEN_STATUSES).lt("due_date", today);
@@ -79,6 +85,8 @@ export default async function ContasAReceberPage({
                 const qs = new URLSearchParams({ type: "receita" });
                 if (searchParams.q) qs.set("q", searchParams.q);
                 if (searchParams.status) qs.set("status", searchParams.status);
+                if (searchParams.from) qs.set("from", searchParams.from);
+                if (searchParams.to) qs.set("to", searchParams.to);
                 return [
                   { label: "Exportar CSV", href: `/api/export/lancamentos?${qs.toString()}&format=csv` },
                   { label: "Exportar Excel", href: `/api/export/lancamentos?${qs.toString()}&format=xlsx` },

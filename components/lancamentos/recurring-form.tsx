@@ -71,6 +71,10 @@ export function RecurringForm({
           <Input id="rr-end" name="end_date" type="date" />
         </div>
         <div>
+          <Label htmlFor="rr-competence-anchor">Data de competência do 1º lançamento (opcional)</Label>
+          <Input id="rr-competence-anchor" name="competence_anchor_date" type="date" />
+        </div>
+        <div>
           <Label htmlFor="rr-max">Quantidade de ocorrências (opcional)</Label>
           <Input id="rr-max" name="max_occurrences" type="number" min="1" step="1" />
         </div>
@@ -132,7 +136,11 @@ export function RecurringForm({
       <p className="text-xs text-ink-faint">
         As ocorrências dos próximos 12 meses são geradas assim que você cria a recorrência. Mais
         ocorrências são geradas automaticamente conforme o tempo passa — veja a tela de
-        Recorrências.
+        Recorrências. Se a competência de cada lançamento deve cair em um dia diferente do
+        vencimento (ex.: vencimento no dia 10 do mês seguinte, mas competência no último dia do
+        mês de referência), informe a data de competência do primeiro lançamento acima — as
+        próximas seguem o mesmo dia do mês, avançando junto com o vencimento. Se deixar em branco,
+        a competência de cada lançamento é igual ao seu próprio vencimento.
       </p>
 
       {state.error && (

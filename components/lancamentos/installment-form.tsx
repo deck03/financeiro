@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useFormState, useFormStatus } from "react-dom";
 import { createInstallmentPlanAction, type FormState } from "@/app/(app)/lancamentos/actions";
 import { Button } from "@/components/ui/button";
@@ -37,6 +38,7 @@ export function InstallmentForm({
 }) {
   const [state, formAction] = useFormState(createInstallmentPlanAction, initialState);
   const today = new Date().toISOString().slice(0, 10);
+  const [recognitionStrategy, setRecognitionStrategy] = useState("por_parcela");
 
   return (
     <form action={formAction} className="space-y-4">
@@ -61,7 +63,13 @@ export function InstallmentForm({
         </div>
         <div>
           <Label htmlFor="ip-recognition">Reconhecimento gerencial</Label>
-          <Select id="ip-recognition" name="recognition_strategy" defaultValue="por_parcela" required>
+          <Select
+            id="ip-recognition"
+            name="recognition_strategy"
+            value={recognitionStrategy}
+            onChange={(e) => setRecognitionStrategy(e.target.value)}
+            required
+          >
             {Object.entries(RECOGNITION_STRATEGY_LABELS).map(([value, label]) => (
               <option key={value} value={value}>
                 {label}
@@ -69,6 +77,12 @@ export function InstallmentForm({
             ))}
           </Select>
         </div>
+        {recognitionStrategy === "competencia_original" && (
+          <div>
+            <Label htmlFor="ip-competence">Data de competência (única para todas as parcelas)</Label>
+            <Input id="ip-competence" name="competence_date" type="date" defaultValue={today} required />
+          </div>
+        )}
 
         <div>
           <Label htmlFor="ip-category">Categoria</Label>
@@ -121,7 +135,9 @@ export function InstallmentForm({
       <p className="text-xs text-ink-faint">
         As parcelas são geradas mensalmente a partir do primeiro vencimento. A última parcela
         absorve eventuais diferenças de arredondamento, para a soma bater exatamente com o valor
-        total.
+        total. Em &quot;Integralmente na competência original&quot;, todas as parcelas usam a
+        mesma data de competência informada acima — útil para uma compra única reconhecida de uma
+        vez, mesmo paga em várias vezes.
       </p>
 
       {state.error && (

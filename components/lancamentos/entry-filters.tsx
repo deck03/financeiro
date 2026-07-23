@@ -16,6 +16,8 @@ export function EntryFilters({ type }: { type: "receita" | "despesa" }) {
   const [isPending, startTransition] = useTransition();
 
   const [search, setSearch] = useState(searchParams.get("q") ?? "");
+  const [from, setFrom] = useState(searchParams.get("from") ?? "");
+  const [to, setTo] = useState(searchParams.get("to") ?? "");
 
   function updateParam(key: string, value: string) {
     const params = new URLSearchParams(searchParams.toString());
@@ -31,7 +33,27 @@ export function EntryFilters({ type }: { type: "receita" | "despesa" }) {
 
   function handleSearchSubmit(e: React.FormEvent) {
     e.preventDefault();
-    updateParam("q", search);
+    const params = new URLSearchParams(searchParams.toString());
+    if (search) params.set("q", search);
+    else params.delete("q");
+    if (from) params.set("from", from);
+    else params.delete("from");
+    if (to) params.set("to", to);
+    else params.delete("to");
+    startTransition(() => {
+      router.push(`${pathname}?${params.toString()}`);
+    });
+  }
+
+  function clearPeriod() {
+    setFrom("");
+    setTo("");
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("from");
+    params.delete("to");
+    startTransition(() => {
+      router.push(`${pathname}?${params.toString()}`);
+    });
   }
 
   return (
@@ -56,9 +78,22 @@ export function EntryFilters({ type }: { type: "receita" | "despesa" }) {
           ))}
         </Select>
       </div>
+      <div className="w-36">
+        <label className="mb-1 block text-xs font-medium text-ink-soft">Vencimento de</label>
+        <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
+      </div>
+      <div className="w-36">
+        <label className="mb-1 block text-xs font-medium text-ink-soft">até</label>
+        <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} />
+      </div>
       <Button type="submit" variant="secondary" disabled={isPending}>
         Buscar
       </Button>
+      {(from || to) && (
+        <Button type="button" variant="ghost" onClick={clearPeriod} disabled={isPending}>
+          Limpar período
+        </Button>
+      )}
     </form>
   );
 }

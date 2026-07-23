@@ -38,22 +38,28 @@ export const reverseSettlementSchema = z.object({
   reason: z.string().optional().or(z.literal("")),
 });
 
-export const installmentPlanSchema = z.object({
-  type: z.enum(["receita", "despesa"]),
-  description: z.string().min(1, "Informe a descrição."),
-  counterparty_id: z.string().uuid().optional().or(z.literal("")),
-  category_id: z.string().uuid("Selecione a categoria."),
-  subcategory_id: z.string().uuid().optional().or(z.literal("")),
-  cost_center_id: z.string().uuid().optional().or(z.literal("")),
-  bank_account_id: z.string().uuid().optional().or(z.literal("")),
-  payment_method_id: z.string().uuid().optional().or(z.literal("")),
-  total_amount: z.coerce.number().positive("Informe um valor maior que zero."),
-  installments_count: z.coerce.number().int().min(2, "Um parcelamento precisa de pelo menos 2 parcelas."),
-  first_due_date: z.string().min(1, "Informe a data do primeiro vencimento."),
-  recognition_strategy: z.enum(["competencia_original", "por_parcela", "conforme_pagamento"]),
-  document_number: z.string().optional().or(z.literal("")),
-  notes: z.string().optional().or(z.literal("")),
-});
+export const installmentPlanSchema = z
+  .object({
+    type: z.enum(["receita", "despesa"]),
+    description: z.string().min(1, "Informe a descrição."),
+    counterparty_id: z.string().uuid().optional().or(z.literal("")),
+    category_id: z.string().uuid("Selecione a categoria."),
+    subcategory_id: z.string().uuid().optional().or(z.literal("")),
+    cost_center_id: z.string().uuid().optional().or(z.literal("")),
+    bank_account_id: z.string().uuid().optional().or(z.literal("")),
+    payment_method_id: z.string().uuid().optional().or(z.literal("")),
+    total_amount: z.coerce.number().positive("Informe um valor maior que zero."),
+    installments_count: z.coerce.number().int().min(2, "Um parcelamento precisa de pelo menos 2 parcelas."),
+    first_due_date: z.string().min(1, "Informe a data do primeiro vencimento."),
+    recognition_strategy: z.enum(["competencia_original", "por_parcela", "conforme_pagamento"]),
+    competence_date: z.string().optional().or(z.literal("")),
+    document_number: z.string().optional().or(z.literal("")),
+    notes: z.string().optional().or(z.literal("")),
+  })
+  .refine((data) => data.recognition_strategy !== "competencia_original" || !!data.competence_date, {
+    message: "Informe a data de competência para o reconhecimento \"Integralmente na competência original\".",
+    path: ["competence_date"],
+  });
 
 export const recurringRuleSchema = z.object({
   type: z.enum(["receita", "despesa"]),
@@ -71,6 +77,7 @@ export const recurringRuleSchema = z.object({
   end_date: z.string().optional().or(z.literal("")),
   max_occurrences: z.string().optional(),
   adjust_business_day: z.coerce.boolean().optional(),
+  competence_anchor_date: z.string().optional().or(z.literal("")),
 });
 
 export const cancelRecurringSchema = z.object({

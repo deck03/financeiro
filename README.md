@@ -1601,3 +1601,59 @@ total de saídas operacionais do fluxo de caixa (123 testes no total, todos pass
   despesa pessoal é paga diretamente da conta empresarial, sem transferência nenhuma, e por
   isso precisa ser um lançamento categorizado, não uma transferência.
 
+---
+
+# Ajuste — data de competência em parcelamentos/recorrências e filtro de período
+
+## Parcelamento: data de competência explícita
+
+O reconhecimento "Integralmente na competência original" já existia (Fase 5), mas usava sempre
+o primeiro vencimento como a competência de todas as parcelas, sem um campo para o usuário
+escolher outra data. Agora, ao selecionar esse reconhecimento, um campo **"Data de competência"**
+aparece no formulário — obrigatório nesse caso, e usado em todas as parcelas geradas. É útil
+para uma compra reconhecida de uma vez só (ex.: no mês da compra), mesmo paga em várias vezes ao
+longo dos meses seguintes.
+
+Retrocompatível: parcelamentos já existentes, criados antes deste ajuste, não são alterados —
+a migration só muda o comportamento de parcelamentos novos.
+
+## Recorrência: competência independente do vencimento
+
+Antes, a competência de cada ocorrência gerada era sempre igual ao seu próprio vencimento — não
+havia como pedir, por exemplo, "vencimento no dia 10 do mês seguinte, mas competência no último
+dia do mês de referência". Agora existe o campo opcional **"Data de competência do 1º
+lançamento"**: se preenchido, cada ocorrência gerada mantém o mesmo dia do mês dessa data,
+avançando o mês junto com o vencimento (a cadência é a mesma da frequência escolhida) — sem
+sofrer o ajuste de dia útil, que é específico do vencimento (data de pagamento), não da
+competência (data contábil). Se deixado em branco, o comportamento é o mesmo de antes:
+competência = vencimento de cada ocorrência.
+
+Implementado via nova coluna `recurring_rules.competence_anchor_date` e ajuste na função
+`generate_recurring_instances()` — retrocompatível: recorrências já existentes (sem essa coluna
+preenchida) continuam gerando ocorrências exatamente como antes.
+
+## Filtro de período em Contas a pagar / Contas a receber
+
+As duas telas ganharam um filtro por **vencimento** ("Vencimento de" / "até"), ao lado do filtro
+de status já existente — útil para ver, por exemplo, só o que vence este mês. O filtro:
+
+- Combina com busca por descrição e status, todos aplicados juntos.
+- É respeitado pela exportação (CSV/Excel) — o arquivo exportado tem sempre o mesmo recorte que
+  a tela está mostrando.
+- Não afeta os cards de totais no topo (Em aberto / Pago ou recebido / Vencido), que continuam
+  mostrando o total geral, independente do filtro — mesmo comportamento que o filtro de status
+  já tinha.
+
+## Migration
+
+`supabase/migrations/0010_data_competencia_e_filtro_periodo.sql` — adiciona
+`installment_groups.single_competence_date` e `recurring_rules.competence_anchor_date`, e
+substitui as funções `create_installment_plan()` e `generate_recurring_instances()`. Sem
+mudança de comportamento para dados/registros já existentes.
+
+## Testes
+
+5 testes novos em `tests/fase12-fix-competencia.test.ts`, cobrindo a validação (competência
+obrigatória apenas quando o reconhecimento é "competencia_original"; âncora de competência
+opcional na recorrência). Total do projeto: 128 testes, todos passando.
+

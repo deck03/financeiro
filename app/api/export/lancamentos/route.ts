@@ -39,6 +39,8 @@ export async function GET(request: NextRequest) {
   const format = params.get("format") === "xlsx" ? "xlsx" : "csv";
   const q = params.get("q") ?? "";
   const status = params.get("status") ?? "";
+  const from = params.get("from") ?? "";
+  const to = params.get("to") ?? "";
   const today = new Date().toISOString().slice(0, 10);
 
   let query = supabase
@@ -50,6 +52,8 @@ export async function GET(request: NextRequest) {
     .order("due_date", { ascending: true });
 
   if (q) query = query.ilike("description", `%${q}%`);
+  if (from) query = query.gte("due_date", from);
+  if (to) query = query.lte("due_date", to);
   if (status === "vencido") {
     query = query.in("status", OPEN_STATUSES).lt("due_date", today);
   } else if (status) {
@@ -99,7 +103,12 @@ export async function GET(request: NextRequest) {
   await logAudit({
     action: "exportar",
     entity: "exportacao",
-    metadata: { tela: slug, formato: format, filtros: { q: q || null, status: status || null }, linhas: count },
+    metadata: {
+      tela: slug,
+      formato: format,
+      filtros: { q: q || null, status: status || null, from: from || null, to: to || null },
+      linhas: count,
+    },
   });
 
   if (format === "xlsx") {

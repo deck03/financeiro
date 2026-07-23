@@ -63,7 +63,9 @@ Duas listas separadas — despesas (Contas a pagar) e receitas (Contas a receber
 recursos:
 
 - **Buscar** por descrição e **filtrar** por status (em aberto, vencido, pago/recebido,
-  cancelado etc.).
+  cancelado etc.) e por **período de vencimento** ("Vencimento de" / "até") — útil para ver, por
+  exemplo, só o que vence este mês. Os filtros combinam entre si e valem também para a
+  exportação (seção 12).
 - **Nova conta a pagar/receber** — preenche descrição, contraparte, categoria, centro de custo,
   valor, vencimento e, opcionalmente, marca como "já paga/recebida" no próprio cadastro.
 - Cada linha mostra o **status** com uma cor: laranja para em aberto, vermelho para vencido,
@@ -90,12 +92,20 @@ Tudo isso fica registrado na Auditoria (seção 13) — quem fez, quando, e com 
 
 - **Parcelamento** — ao criar uma conta a pagar/receber, marque a opção de parcelar. Informe o
   valor total, o número de parcelas e a data da primeira. O sistema cria automaticamente um
-  lançamento para cada parcela, todos vinculados.
+  lançamento para cada parcela, todos vinculados. Em "Reconhecimento gerencial", escolha como a
+  DRE deve tratar o valor: por parcela (cada parcela conta no mês do seu próprio vencimento — o
+  padrão), integralmente na competência original (todo o valor conta em uma única data, que você
+  informa no campo que aparece — útil para uma compra reconhecida de uma vez, mesmo paga em
+  várias vezes) ou conforme pagamento (só conta quando cada parcela for efetivamente paga/recebida).
 - **Recorrência** — para despesas ou receitas que se repetem (aluguel recebido todo mês, por
   exemplo). Defina a frequência (semanal, mensal, bimestral, trimestral, semestral ou anual), a
   data de início e, se quiser, uma data final ou um número máximo de ocorrências. O sistema gera
   automaticamente as ocorrências dos próximos 12 meses; na tela **Recorrências**, um botão
-  permite gerar mais 12 meses quando necessário.
+  permite gerar mais 12 meses quando necessário. Se a competência de cada lançamento precisa
+  cair em um dia diferente do vencimento (por exemplo, vencimento no dia 10 do mês seguinte, mas
+  competência no último dia do mês de referência), preencha "Data de competência do 1º
+  lançamento" — as próximas ocorrências mantêm o mesmo dia do mês, avançando junto com o
+  vencimento. Se deixar em branco, a competência de cada lançamento é igual ao seu vencimento.
 - Para cancelar uma recorrência, você escolhe o escopo: só as ocorrências futuras a partir de
   hoje, ou todas.
 
