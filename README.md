@@ -1731,3 +1731,54 @@ retroativamente a partir do lançamento vinculado, quando ele ainda existir.
 competência) e os testes de PDF existentes foram atualizados para o novo layout. Total do
 projeto: 134 testes, todos passando.
 
+---
+
+# Ajuste — deriva de dia útil na recorrência, e edição de saldo inicial
+
+## Vencimentos da recorrência "andando para frente" mês a mês
+
+Reportado com uma recorrência mensal (dia 24, ajuste de dia útil ativado): os vencimentos
+gerados foram 24/08, 24/09, 26/10, 26/11, 28/12, 28/01... — indo cada vez mais longe do dia 24
+em vez de voltar para ele todo mês.
+
+**Causa raiz:** a função `generate_recurring_instances()` usava a data já ajustada de uma
+ocorrência como base para calcular a próxima. Assim, quando um mês caía num fim de semana e o
+vencimento era empurrado (ex.: 24/10, sábado → 26/10, segunda), esse "+2 dias" ficava **grudado**
+nas ocorrências seguintes — o mês seguinte somava 1 mês a partir de 26, não de 24, e assim por
+diante, indefinidamente.
+
+**Correção:** cada ocorrência agora é sempre calculada a partir de `data inicial + (número da
+ocorrência × frequência)` — nunca a partir da ocorrência anterior. O ajuste de dia útil passa a
+ser aplicado a cada ocorrência individualmente, sem contaminar as seguintes. Com isso, o
+exemplo acima passa a gerar 24/08, 24/09, 26/10 (sábado → ajustado), 24/11 (volta para 24),
+24/12, 25/01 (domingo → ajustado), 24/02 (volta para 24), e assim por diante.
+
+A migration também **recalcula automaticamente** o vencimento das ocorrências já geradas com o
+bug — mas só as que ainda estão em aberto/agendadas. Lançamentos já pagos, cancelados ou
+estornados nunca são reescritos (histórico financeiro é imutável).
+
+## Editar saldo inicial de uma conta já existente
+
+Antes, o saldo inicial só podia ser definido na criação da conta bancária — não havia como
+corrigir depois, mesmo que a conta tivesse sido cadastrada com um valor provisório. Agora, a
+tela de detalhe de cada conta bancária (Cadastros → Contas bancárias → abrir uma conta) tem uma
+seção **"Editar saldo inicial"**, disponível para quem tem a permissão de alterar contas
+bancárias. A mudança:
+
+- Desloca o saldo calculado a partir de agora, de forma consistente.
+- Não reescreve nenhuma liquidação ou movimentação já registrada.
+- Fica registrada na Auditoria, com o valor anterior e o novo.
+
+## Migration
+
+`supabase/migrations/0012_corrige_deriva_dia_util_recorrencia.sql` — substitui
+`generate_recurring_instances()` e recalcula os vencimentos ainda em aberto que tinham sido
+gerados com o bug.
+
+## Testes
+
+4 testes novos em `tests/fase12-fix-recorrencia-datas.test.ts`, reproduzindo exatamente o caso
+relatado (início 24/08/2026, mensal, ajuste de dia útil) e confirmando que a correção mantém o
+dia 24 ancorado, ajustando cada ocorrência individualmente. Total do projeto: 138 testes, todos
+passando.
+

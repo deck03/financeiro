@@ -291,7 +291,9 @@ Base para os lançamentos:
   > todos os relatórios, mesmo saindo da conta empresarial.
 - **Centros de custo** — para saber em qual "área" cada despesa/receita pertence.
 - **Contas bancárias** — cadastre com a titularidade correta (empresarial ou pessoa física); só
-  contas empresariais entram no dashboard e nos relatórios por padrão.
+  contas empresariais entram no dashboard e nos relatórios por padrão. Se precisar corrigir o
+  saldo inicial de uma conta já cadastrada, abra a conta (clique nela na lista) — há uma seção
+  "Editar saldo inicial" na tela de detalhe.
 - **Contrapartes** — clientes, fornecedores, locatários, sócios etc. Uma contraparte pode ter
   mais de um "tipo" ao mesmo tempo.
 - **Formas de pagamento** — Pix, boleto, cartão, transferência etc.

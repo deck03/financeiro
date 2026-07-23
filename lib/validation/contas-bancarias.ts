@@ -28,3 +28,13 @@ export const bankAccountSchema = z.object({
   consider_in_business_dashboard: z.coerce.boolean().optional(),
   allow_ofx_import: z.coerce.boolean().optional(),
 });
+
+/**
+ * Edição do saldo inicial de uma conta já existente (ajuste pós-criação —
+ * antes só era possível definir o saldo inicial ao criar a conta).
+ */
+export const updateInitialBalanceSchema = z.object({
+  bank_account_id: z.string().uuid(),
+  initial_balance: z.coerce.number(),
+  initial_balance_date: z.string().min(1, "Informe a data do saldo inicial."),
+});

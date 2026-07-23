@@ -2,7 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { requirePermission } from "@/lib/permissions";
-import { bankAccountSchema } from "@/lib/validation/contas-bancarias";
+import { bankAccountSchema, updateInitialBalanceSchema } from "@/lib/validation/contas-bancarias";
 import { balanceSnapshotSchema } from "@/lib/validation/transferencias";
 import { revalidatePath } from "next/cache";
 import { logAudit } from "@/lib/audit";
@@ -139,5 +139,66 @@ export async function createBalanceSnapshotAction(_prev: FormState, formData: Fo
   });
 
   revalidatePath(`/cadastros/contas-bancarias/${parsed.data.bank_account_id}`);
+  return { success: true };
+}
+
+// ---------------------------------------------------------------------------
+// Editar o saldo inicial de uma conta já existente.
+//
+// Antes, o saldo inicial só podia ser definido na criação da conta — se o
+// operador cadastrasse a conta antes de saber o saldo exato (ou errasse o
+// valor), não havia como corrigir depois. bank_account_balance() soma o
+// saldo inicial a todas as liquidações e transferências da conta sem
+// filtrar por initial_balance_date (a data é só informativa/de exibição),
+// então editar os dois campos aqui é seguro: desloca o saldo calculado de
+// forma consistente, sem reescrever nenhuma liquidação já registrada.
+// ---------------------------------------------------------------------------
+export async function updateInitialBalanceAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  try {
+    await requirePermission("alterar_contas_bancarias");
+  } catch {
+    return { error: "Você não tem permissão para alterar contas bancárias." };
+  }
+
+  const parsed = updateInitialBalanceSchema.safeParse({
+    bank_account_id: formData.get("bank_account_id"),
+    initial_balance: formData.get("initial_balance"),
+    initial_balance_date: formData.get("initial_balance_date"),
+  });
+
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
+  }
+
+  const { supabase, userId } = await getOrgIdAndUser();
+
+  const { data: before } = await supabase
+    .from("bank_accounts")
+    .select("initial_balance, initial_balance_date")
+    .eq("id", parsed.data.bank_account_id)
+    .single();
+
+  const { error } = await supabase
+    .from("bank_accounts")
+    .update({
+      initial_balance: parsed.data.initial_balance,
+      initial_balance_date: parsed.data.initial_balance_date,
+      updated_by: userId,
+    })
+    .eq("id", parsed.data.bank_account_id);
+
+  if (error) return { error: "Não foi possível atualizar o saldo inicial." };
+
+  await logAudit({
+    action: "editar",
+    entity: "bank_accounts",
+    entityId: parsed.data.bank_account_id,
+    previousValue: before ? { saldoInicial: before.initial_balance, data: before.initial_balance_date } : null,
+    newValue: { saldoInicial: parsed.data.initial_balance, data: parsed.data.initial_balance_date },
+  });
+
+  revalidatePath(`/cadastros/contas-bancarias/${parsed.data.bank_account_id}`);
+  revalidatePath("/cadastros/contas-bancarias");
+  revalidatePath("/dashboard");
   return { success: true };
 }

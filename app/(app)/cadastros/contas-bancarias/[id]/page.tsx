@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { hasPermission } from "@/lib/permissions";
 import { Card } from "@/components/ui/card";
 import { BalanceSnapshotForm } from "../balance-snapshot-form";
+import { EditInitialBalanceForm } from "../edit-initial-balance-form";
 import { notFound } from "next/navigation";
 
 function formatCurrency(value: number) {
@@ -109,6 +110,22 @@ export default async function ContaBancariaDetalhePage({ params }: { params: { i
           </div>
         </div>
       </Card>
+
+      {canEdit && (
+        <Card>
+          <h2 className="mb-1 text-base font-semibold text-ink">Editar saldo inicial</h2>
+          <p className="mb-3 text-sm text-ink-soft">
+            Use isto para corrigir o saldo inicial de uma conta já criada — por exemplo, se ela
+            foi cadastrada antes de você ter o valor exato. A mudança afeta o saldo calculado a
+            partir de agora; nenhuma liquidação já registrada é alterada.
+          </p>
+          <EditInitialBalanceForm
+            bankAccountId={account.id}
+            currentBalance={Number(account.initial_balance)}
+            currentDate={account.initial_balance_date}
+          />
+        </Card>
+      )}
 
       <Card>
         <h2 className="mb-4 text-base font-semibold text-ink">Extrato</h2>
