@@ -84,8 +84,8 @@ describe("Correção — 'Invalid input' em parcelamento/recorrência (subcatego
     const result = installmentPlanSchema.safeParse({
       ...baseInstallment,
       recognition_strategy: "por_parcela",
-      subcategory_id: null ?? "",
-      payment_method_id: null ?? "",
+      subcategory_id: "",
+      payment_method_id: "",
     });
     expect(result.success).toBe(true);
   });
@@ -100,8 +100,8 @@ describe("Correção — 'Invalid input' em parcelamento/recorrência (subcatego
 
     const comFallback = recurringRuleSchema.safeParse({
       ...baseRecurring,
-      subcategory_id: null ?? "",
-      payment_method_id: null ?? "",
+      subcategory_id: "",
+      payment_method_id: "",
     });
     expect(comFallback.success).toBe(true);
   });

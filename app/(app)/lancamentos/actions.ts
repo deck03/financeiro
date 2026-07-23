@@ -419,7 +419,24 @@ export async function createRecurringRuleAction(_prev: FormState, formData: Form
     return { error: "Não foi possível criar a recorrência." };
   }
 
-  await supabase.rpc("generate_recurring_instances", { p_rule_id: rule.id, p_months_ahead: 12 });
+  const { data: occurrencesGenerated, error: generateError } = await supabase.rpc("generate_recurring_instances", {
+    p_rule_id: rule.id,
+    p_months_ahead: 12,
+  });
+
+  if (generateError) {
+    // A regra já foi criada — não desfazemos isso — mas o operador precisa
+    // saber que nenhum lançamento foi gerado ainda, em vez de simplesmente
+    // não encontrá-los em Contas a pagar/receber sem explicação.
+    await logAudit({
+      action: "criar",
+      entity: "recurring_rules",
+      entityId: rule.id,
+      metadata: { erro_ao_gerar_ocorrencias: generateError.message },
+    });
+    revalidatePath("/recorrencias");
+    redirect(`/recorrencias?erro_geracao=${encodeURIComponent(rule.id)}`);
+  }
 
   await logAudit({
     action: "criar",
@@ -431,10 +448,16 @@ export async function createRecurringRuleAction(_prev: FormState, formData: Form
       valor: data.amount,
       frequencia: data.frequency,
       ancoraCompetencia: data.competence_anchor_date || null,
+      ocorrenciasGeradas: occurrencesGenerated ?? 0,
     },
   });
 
+  // A recorrência já gera lançamentos reais na criação — sem revalidar
+  // Contas a pagar/receber, quem for direto para lá pode ver a lista
+  // desatualizada por causa do cache de navegação do Next.js.
   revalidatePath("/recorrencias");
+  revalidatePath("/contas-a-pagar");
+  revalidatePath("/contas-a-receber");
   redirect("/recorrencias");
 }
 
@@ -443,9 +466,22 @@ export async function createRecurringRuleAction(_prev: FormState, formData: Form
 // ---------------------------------------------------------------------------
 export async function generateMoreOccurrencesAction(ruleId: string) {
   const { supabase } = await getOrgIdAndUser();
-  await supabase.rpc("generate_recurring_instances", { p_rule_id: ruleId, p_months_ahead: 12 });
+  const { data: rule } = await supabase.from("recurring_rules").select("type").eq("id", ruleId).single();
+  const { error } = await supabase.rpc("generate_recurring_instances", { p_rule_id: ruleId, p_months_ahead: 12 });
+  if (error) {
+    await logAudit({
+      action: "gerar",
+      entity: "recurring_rules",
+      entityId: ruleId,
+      metadata: { acao: "gerar ocorrências (+12 meses)", erro: error.message },
+    });
+    revalidatePath("/recorrencias");
+    return { error: "Não foi possível gerar novas ocorrências. Tente novamente em instantes." };
+  }
   await logAudit({ action: "gerar", entity: "recurring_rules", entityId: ruleId, metadata: { acao: "gerar ocorrências (+12 meses)" } });
   revalidatePath("/recorrencias");
+  revalidatePath(rule?.type === "despesa" ? "/contas-a-pagar" : "/contas-a-receber");
+  return { success: true };
 }
 
 // ---------------------------------------------------------------------------

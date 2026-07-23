@@ -24,8 +24,12 @@ export function NewReceiptForm({ settlementId }: { settlementId: string }) {
       <input type="hidden" name="settlement_id" value={settlementId} />
 
       <div>
-        <Label htmlFor="reference_period">Período de referência (opcional)</Label>
-        <Input id="reference_period" name="reference_period" placeholder="Ex.: Julho/2026" />
+        <Label htmlFor="reference_period">Referência (competência)</Label>
+        <Input id="reference_period" name="reference_period" placeholder="Preenchido automaticamente a partir da competência do lançamento" />
+        <p className="mt-1 text-xs text-ink-faint">
+          Deixe em branco para usar a competência do lançamento automaticamente (ex.:
+          &quot;Julho/2026&quot;). Só preencha aqui se quiser um texto diferente.
+        </p>
       </div>
       <div>
         <Label htmlFor="space_description">Descrição do espaço alugado (opcional)</Label>

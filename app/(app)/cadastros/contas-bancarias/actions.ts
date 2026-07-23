@@ -29,15 +29,20 @@ export async function createBankAccountAction(_prev: FormState, formData: FormDa
     return { error: "Você não tem permissão para alterar contas bancárias." };
   }
 
+  // formData.get() retorna null para campos que não existem no formulário
+  // (aqui, document_number nunca teve campo — mesma causa-raiz já corrigida
+  // em lançamentos/relatórios). O "?? ''" evita o erro genérico "Invalid input".
   const parsed = bankAccountSchema.safeParse({
     display_name: formData.get("display_name"),
-    bank_name: formData.get("bank_name"),
-    agency: formData.get("agency"),
-    account_number: formData.get("account_number"),
+    bank_name: formData.get("bank_name") ?? "",
+    agency: formData.get("agency") ?? "",
+    account_number: formData.get("account_number") ?? "",
+    bank_code: formData.get("bank_code") ?? "",
+    pix_key: formData.get("pix_key") ?? "",
     account_type: formData.get("account_type"),
     ownership: formData.get("ownership"),
-    holder_name: formData.get("holder_name"),
-    document_number: formData.get("document_number"),
+    holder_name: formData.get("holder_name") ?? "",
+    document_number: formData.get("document_number") ?? "",
     initial_balance: formData.get("initial_balance") || "0",
     initial_balance_date: formData.get("initial_balance_date"),
     minimum_balance: formData.get("minimum_balance") || "",
@@ -57,6 +62,8 @@ export async function createBankAccountAction(_prev: FormState, formData: FormDa
     bank_name: parsed.data.bank_name || null,
     agency: parsed.data.agency || null,
     account_number: parsed.data.account_number || null,
+    bank_code: parsed.data.bank_code || null,
+    pix_key: parsed.data.pix_key || null,
     account_type: parsed.data.account_type,
     ownership: parsed.data.ownership,
     holder_name: parsed.data.holder_name || null,

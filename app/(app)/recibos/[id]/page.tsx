@@ -19,7 +19,7 @@ export default async function ReciboDetalhePage({ params }: { params: { id: stri
   const { data: receipt } = await supabase
     .from("rent_receipts")
     .select(
-      "id, receipt_number_formatted, amount, amount_in_words, payment_date, reference_period, space_description, notes, verification_code, file_path, entry_id, counterparties(name, document_number)"
+      "id, receipt_number_formatted, amount, amount_in_words, payment_date, due_date, reference_period, space_description, notes, verification_code, file_path, entry_id, counterparties(name, document_number)"
     )
     .eq("id", params.id)
     .single();
@@ -46,6 +46,12 @@ export default async function ReciboDetalhePage({ params }: { params: { id: stri
             <p className="text-xs font-medium uppercase tracking-wide text-ink-faint">Data do recebimento</p>
             <p className="mt-0.5 text-sm text-ink">{formatDate(receipt.payment_date)}</p>
           </div>
+          {receipt.due_date && (
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wide text-ink-faint">Vencimento</p>
+              <p className="mt-0.5 text-sm text-ink">{formatDate(receipt.due_date)}</p>
+            </div>
+          )}
           {receipt.reference_period && (
             <div>
               <p className="text-xs font-medium uppercase tracking-wide text-ink-faint">Período de referência</p>

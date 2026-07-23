@@ -184,9 +184,20 @@ quais categorias mais pesaram na diferença.
 Para locatários cadastrados, depois de registrar o recebimento do aluguel:
 
 1. Vá até a liquidação correspondente e clique em **Gerar recibo**.
-2. Preencha o período de referência e, se quiser, a descrição do espaço alugado.
-3. O sistema gera um PDF numerado sequencialmente, com o valor por extenso, e o guarda
-   automaticamente na lista de **Recibos** — dá para baixar quantas vezes precisar.
+2. Os campos de **Referência** (competência) e **Vencimento** já vêm preenchidos
+   automaticamente a partir do lançamento — só digite algo ali se quiser um texto diferente do
+   padrão. Preencha também o período de referência apenas se quiser sobrescrever, e a descrição
+   do espaço alugado, se fizer sentido.
+3. O sistema gera um PDF numerado sequencialmente, no modelo com Locador e Imóvel fixos,
+   Locatário (razão social e CNPJ vindos automaticamente da contraparte), Referência,
+   Vencimento, Total e os Dados Bancários da conta que recebeu o pagamento — nada disso precisa
+   ser digitado à mão, exceto ajustes pontuais.
+4. O recibo fica guardado automaticamente na lista de **Recibos** — dá para baixar quantas
+   vezes precisar.
+
+Para os dados bancários aparecerem corretamente no recibo, preencha o **código do banco** (ex.:
+341 para Itaú) e a **chave Pix** no cadastro da conta bancária usada para receber os aluguéis
+(seção 16 — Cadastros → Contas bancárias).
 
 Este é um documento gerencial (recibo de recebimento), não uma nota fiscal.
 

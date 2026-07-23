@@ -5,6 +5,8 @@ export const bankAccountSchema = z.object({
   bank_name: z.string().optional().or(z.literal("")),
   agency: z.string().optional().or(z.literal("")),
   account_number: z.string().optional().or(z.literal("")),
+  bank_code: z.string().optional().or(z.literal("")),
+  pix_key: z.string().optional().or(z.literal("")),
   account_type: z.enum([
     "conta_corrente",
     "conta_pagamento",

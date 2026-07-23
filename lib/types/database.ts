@@ -450,6 +450,8 @@ export type Database = {
           bank_name: string | null;
           agency: string | null;
           account_number: string | null;
+          bank_code: string | null;
+          pix_key: string | null;
           account_type: string;
           ownership: string;
           holder_name: string | null;
@@ -474,6 +476,8 @@ export type Database = {
           bank_name?: string | null;
           agency?: string | null;
           account_number?: string | null;
+          bank_code?: string | null;
+          pix_key?: string | null;
           account_type?: string;
           ownership?: string;
           holder_name?: string | null;
@@ -498,6 +502,8 @@ export type Database = {
           bank_name?: string | null;
           agency?: string | null;
           account_number?: string | null;
+          bank_code?: string | null;
+          pix_key?: string | null;
           account_type?: string;
           ownership?: string;
           holder_name?: string | null;
@@ -1138,6 +1144,7 @@ export type Database = {
           amount: number;
           amount_in_words: string;
           payment_date: string;
+          due_date: string | null;
           reference_period: string | null;
           space_description: string | null;
           payment_method_id: string | null;
@@ -1159,6 +1166,7 @@ export type Database = {
           amount: number;
           amount_in_words: string;
           payment_date: string;
+          due_date?: string | null;
           reference_period?: string | null;
           space_description?: string | null;
           payment_method_id?: string | null;
@@ -1180,6 +1188,7 @@ export type Database = {
           amount?: number;
           amount_in_words?: string;
           payment_date?: string;
+          due_date?: string | null;
           reference_period?: string | null;
           space_description?: string | null;
           payment_method_id?: string | null;

@@ -1673,3 +1673,61 @@ Corrigido convertendo `null` em string vazia (`?? ""`) antes de validar, nas dua
 (`createInstallmentPlanAction` e `createRecurringRuleAction`). 3 testes novos reproduzem o bug
 e confirmam a correção (131 testes no total). Sem mudança de banco de dados — é só código.
 
+---
+
+# Ajuste — recorrência não gerava lançamentos visíveis, e recibo no modelo real
+
+## Recorrência criada não aparecia em Contas a pagar/receber
+
+Causa raiz: duas falhas na action de criar recorrência.
+
+1. A chamada que gera os lançamentos (`generate_recurring_instances`) não checava erro — se
+   falhasse por qualquer motivo, a regra ficava criada, mas com **zero lançamentos**, sem
+   nenhum aviso ao usuário.
+2. A action só revalidava a tela de Recorrências, nunca Contas a pagar/receber — mesmo quando a
+   geração dava certo, a lista podia continuar mostrando uma versão desatualizada por causa do
+   cache de navegação do Next.js.
+
+Corrigido: o erro do RPC agora é checado — se falhar, a regra continua criada (não é desfeita),
+mas o usuário é redirecionado com um aviso explicando que precisa usar o botão "Gerar próximas
+ocorrências" para tentar de novo. Esse botão também passou a exibir erro na tela em vez de
+falhar silenciosamente. E a criação bem-sucedida agora revalida Contas a pagar **e** Contas a
+receber, além de Recorrências.
+
+Se você tem uma recorrência já criada que não gerou nenhum lançamento, vá até **Recorrências**
+e clique em "Gerar próximas ocorrências" na regra correspondente.
+
+## Recibo de aluguel no layout do modelo real
+
+O recibo (Fase 10) usava um texto corrido. Foi redesenhado para o modelo de campos rotulados
+já usado em papel pelo DECK 03: Locador e Imóvel fixos no cabeçalho, e abaixo Locatário (razão
+social + CNPJ), Referência, Vencimento, Total, e o bloco de Dados Bancários (banco, código,
+agência, conta, chave Pix, beneficiário) — todos preenchidos automaticamente:
+
+- **Locatário**: nome e CNPJ vêm da contraparte vinculada ao lançamento — nunca digitados à mão.
+- **Referência**: agora vem da **competência do lançamento** automaticamente (ex.:
+  "Julho/2026"), a mesma competência usada na DRE. Ainda pode ser sobrescrita manualmente no
+  formulário de emissão, se necessário.
+- **Vencimento**: vem do vencimento da conta a receber original (antes não aparecia no recibo).
+- **Dados bancários**: vêm da conta bancária que recebeu o pagamento. Para isso, dois campos
+  novos foram adicionados ao cadastro de **Contas bancárias**: código do banco (ex.: 341) e
+  chave Pix — preencha-os na conta usada para receber aluguéis.
+
+No caminho, encontrei e corrigi o **mesmo bug "Invalid input"** já corrigido em parcelamento/
+recorrência, desta vez no cadastro de **Contas bancárias**: o campo `document_number` não tinha
+input no formulário, mas o schema o esperava como opcional — mesma causa raiz (formData.get()
+retorna `null`, não `undefined`, para um campo inexistente).
+
+## Migration
+
+`supabase/migrations/0011_recibo_modelo_real.sql` — adiciona `bank_accounts.bank_code`,
+`bank_accounts.pix_key` e `rent_receipts.due_date`; atualiza `create_rent_receipt()` para gravar
+o vencimento. Recibos já emitidos antes desta migration têm o vencimento preenchido
+retroativamente a partir do lançamento vinculado, quando ele ainda existir.
+
+## Testes
+
+3 testes novos em `tests/fase12-fix-recibo.test.ts` (formatação da referência a partir da
+competência) e os testes de PDF existentes foram atualizados para o novo layout. Total do
+projeto: 134 testes, todos passando.
+

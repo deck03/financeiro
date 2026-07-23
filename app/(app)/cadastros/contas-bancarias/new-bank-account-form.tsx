@@ -65,6 +65,17 @@ export function NewBankAccountForm() {
         </div>
       </div>
 
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div>
+          <Label htmlFor="ba-bank-code">Código do banco (opcional)</Label>
+          <Input id="ba-bank-code" name="bank_code" placeholder="Ex.: 341" />
+        </div>
+        <div className="sm:col-span-2">
+          <Label htmlFor="ba-pix">Chave Pix (opcional)</Label>
+          <Input id="ba-pix" name="pix_key" placeholder="Usada nos recibos de aluguel" />
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
         <div>
           <Label htmlFor="ba-balance">Saldo inicial</Label>

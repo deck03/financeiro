@@ -16,7 +16,11 @@ function formatDate(value: string) {
   return `${day}/${month}/${year}`;
 }
 
-export default async function RecorrenciasPage() {
+export default async function RecorrenciasPage({
+  searchParams,
+}: {
+  searchParams: { erro_geracao?: string };
+}) {
   const supabase = createClient();
   const canManage = await hasPermission("criar_lancamentos");
 
@@ -65,6 +69,14 @@ export default async function RecorrenciasPage() {
           )}
         </div>
       </div>
+
+      {searchParams.erro_geracao && (
+        <div className="rounded-card border border-signal-negative/40 bg-signal-negative/10 px-4 py-3 text-sm text-signal-negative">
+          A recorrência foi criada, mas não foi possível gerar os lançamentos automaticamente —
+          por isso ela ainda não aparece em Contas a pagar/receber. Use o botão &quot;Gerar
+          próximas ocorrências&quot; abaixo para tentar novamente.
+        </div>
+      )}
 
       <div className="space-y-4">
         {rulesWithEntries.map((r) => (
