@@ -1068,6 +1068,7 @@ export type Database = {
           import_batch_id: string | null;
           ofx_transaction_id: string | null;
           transaction_hash: string;
+          hash_dedupe_key: string | null;
           transaction_date: string;
           amount: number;
           description: string;

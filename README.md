@@ -1818,3 +1818,68 @@ para só bloquear reemissão quando já existir um recibo **ativo** (não qualqu
 4 testes novos em `tests/fase12-fix-cancelar-recibo.test.ts`. Total do projeto: 142 testes,
 todos passando.
 
+---
+
+# Correção crítica — importação OFX não gravava nenhuma transação
+
+## O problema
+
+Depois de importar um arquivo OFX e ir para a tela de Conciliação bancária, ela sempre aparecia
+vazia ("Não conciliadas (0)", "Nenhuma transação conciliada ainda"), mesmo logo depois de uma
+importação que a tela dizia ter sido concluída com sucesso.
+
+## Causa raiz
+
+Os dois índices que garantem que uma transação não seja importada duas vezes
+(`ux_bank_tx_fitid`, para quando o banco fornece um identificador único da transação, e
+`ux_bank_tx_hash`, usado como alternativa quando não há esse identificador) eram **índices
+únicos parciais** — só valem para um subconjunto de linhas (`where ofx_transaction_id is not
+null` e `where ofx_transaction_id is null`, respectivamente).
+
+O Postgres não aceita usar um índice parcial como alvo de `ON CONFLICT (colunas)` a menos que o
+predicado seja repetido na própria instrução — e o `upsert` usado pela aplicação (via
+Supabase) não tem como fazer isso. Toda chamada de importação, desde a Fase 9, terminava num
+erro do Postgres ("no unique or exclusion constraint matching the ON CONFLICT specification") —
+e esse erro estava sendo **descartado silenciosamente** no código (`if (!error) importedCount
++= ...`, sem nunca checar o caminho de erro), então a aplicação sempre respondia como se tivesse
+dado certo, mesmo sem gravar nenhuma linha.
+
+**Nenhuma transação OFX foi realmente salva em nenhuma importação até esta correção.**
+
+## Correção
+
+- **`ux_bank_tx_fitid`** passou a ser um índice único comum (não parcial). Continua correto sem
+  a condição: por padrão, o Postgres trata múltiplos valores `NULL` como distintos entre si num
+  índice único — várias transações sem identificador único continuam podendo coexistir.
+- Para o hash (usado só na ausência de identificador único), a mesma solução não bastava — a
+  condição tinha um propósito real: não aplicar a unicidade do hash a transações que já têm
+  identificador único (evitando bloquear como "duplicata" duas transações genuinamente
+  diferentes que só coincidem em data/valor/descrição). Resolvido com uma **coluna gerada**
+  (`hash_dedupe_key`, calculada automaticamente pelo banco: espelha o hash só quando não há
+  identificador único) e um índice único comum sobre essa coluna — que o `upsert` da aplicação
+  já consegue usar normalmente.
+- O código da action de importação agora **checa e reporta erros** de gravação em vez de
+  descartá-los — se algo assim acontecer de novo por qualquer outro motivo, você vai ver uma
+  mensagem de erro clara, o lote fica registrado em `import_errors` para investigação, e a tela
+  nunca mais vai dizer "concluído" sem ter gravado nada.
+- A política de leitura de transações importadas passou a valer também para quem só tem a
+  permissão de importar (antes exigia também a permissão de conciliar) — sem isso, um operador
+  com permissão só de importar veria a mesma contagem zerada por engano, mesmo depois desta
+  correção.
+
+## Migration
+
+`supabase/migrations/0014_corrige_importacao_ofx.sql`.
+
+## Testes
+
+4 testes novos em `tests/fase12-fix-ofx-import.test.ts`, documentando a função de hash e a regra
+que a coluna gerada `hash_dedupe_key` implementa. Total do projeto: 146 testes, todos passando.
+(A correção em si é de nível de banco — não há como reproduzir o comportamento do Postgres com
+`ON CONFLICT` num teste em TypeScript puro; os testes cobrem a parte testável dessa forma.)
+
+## Se você já tentou importar OFX antes desta correção
+
+Nenhuma transação daquelas tentativas foi salva — não há nada para limpar ou desfazer. Depois
+de aplicar esta correção, basta importar o arquivo `.ofx` novamente.
+

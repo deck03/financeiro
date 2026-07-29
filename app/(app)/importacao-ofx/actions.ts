@@ -152,21 +152,43 @@ export async function confirmOfxImportAction(
   const withoutFitid = withHashes.filter((t) => !t.ofx_transaction_id);
 
   let importedCount = 0;
+  const insertErrors: string[] = [];
 
   if (withFitid.length > 0) {
     const { data, error } = await supabase
       .from("bank_transactions")
       .upsert(withFitid, { onConflict: "bank_account_id,ofx_transaction_id", ignoreDuplicates: true })
       .select("id");
-    if (!error) importedCount += data?.length ?? 0;
+    if (error) insertErrors.push(error.message);
+    else importedCount += data?.length ?? 0;
   }
 
   if (withoutFitid.length > 0) {
+    // hash_dedupe_key é uma coluna gerada pelo banco (espelha transaction_hash
+    // só quando não há FITID) — não enviamos o campo no insert, o Postgres
+    // calcula sozinho, mas o onConflict precisa apontar para ela, não para
+    // transaction_hash diretamente (ver migration 0014).
     const { data, error } = await supabase
       .from("bank_transactions")
-      .upsert(withoutFitid, { onConflict: "bank_account_id,transaction_hash", ignoreDuplicates: true })
+      .upsert(withoutFitid, { onConflict: "bank_account_id,hash_dedupe_key", ignoreDuplicates: true })
       .select("id");
-    if (!error) importedCount += data?.length ?? 0;
+    if (error) insertErrors.push(error.message);
+    else importedCount += data?.length ?? 0;
+  }
+
+  if (insertErrors.length > 0) {
+    // Nunca finge sucesso quando a gravação falhou — antes deste ajuste,
+    // um erro aqui era descartado e a tela mostrava "importação concluída"
+    // mesmo sem gravar nenhuma linha.
+    await supabase.from("import_errors").insert({
+      organization_id: organizationId,
+      import_batch_id: batch.id,
+      message: insertErrors.join(" | "),
+    });
+    return {
+      error:
+        "Não foi possível gravar as transações importadas. O lote foi registrado com o erro para investigação — nada foi perdido, mas nada foi salvo ainda. Avise o suporte.",
+    };
   }
 
   const duplicateCount = parsed.data.transactions.length - importedCount;
