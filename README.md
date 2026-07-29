@@ -1928,3 +1928,18 @@ Nenhuma mudança de banco de dados — usa os mesmos dados que já existiam.
 8 testes novos em `tests/fase12-conciliacao-sugestao.test.ts`. Total do projeto: 154 testes,
 todos passando.
 
+---
+
+# Correção — "Invalid input" ao criar lançamento pela conciliação
+
+Mesma causa-raiz já corrigida antes (relatórios, parcelamento/recorrência, contas bancárias): o
+formulário de **"Criar lançamento"** na tela de Conciliação bancária nunca teve campos de
+número de documento e observações, mas o schema de validação os esperava como opcionais.
+`formData.get()` retorna `null` (não `undefined`) para um campo ausente do formulário, e
+`z.optional()` só aceita `undefined` — a combinação gera o erro genérico "Invalid input".
+
+Corrigido convertendo `null` em string vazia antes de validar, em
+`reconcileWithNewEntryAction`. O formulário de "Vincular a lançamento existente" já estava
+correto (não precisou de ajuste). 3 testes novos reproduzem o bug e confirmam a correção. Total
+do projeto: 157 testes, todos passando. Sem mudança de banco de dados.
+

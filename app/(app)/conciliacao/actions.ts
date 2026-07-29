@@ -58,16 +58,22 @@ export async function reconcileWithNewEntryAction(_prev: FormState, formData: Fo
     return { error: "Você não tem permissão para conciliar transações." };
   }
 
+  // formData.get() retorna null (não undefined) para campos que não existem
+  // no formulário — aqui, document_number e notes nunca tiveram input no
+  // formulário de "Criar lançamento" da conciliação. z.optional() só aceita
+  // undefined, não null, então isso quebrava a validação com o erro
+  // genérico "Invalid input" (mesma causa-raiz já corrigida em relatórios,
+  // parcelamento/recorrência e contas bancárias).
   const parsed = reconcileNewEntrySchema.safeParse({
     bank_transaction_id: formData.get("bank_transaction_id"),
     category_id: formData.get("category_id"),
-    description: formData.get("description"),
-    counterparty_id: formData.get("counterparty_id"),
-    subcategory_id: formData.get("subcategory_id"),
-    cost_center_id: formData.get("cost_center_id"),
-    payment_method_id: formData.get("payment_method_id"),
-    document_number: formData.get("document_number"),
-    notes: formData.get("notes"),
+    description: formData.get("description") ?? "",
+    counterparty_id: formData.get("counterparty_id") ?? "",
+    subcategory_id: formData.get("subcategory_id") ?? "",
+    cost_center_id: formData.get("cost_center_id") ?? "",
+    payment_method_id: formData.get("payment_method_id") ?? "",
+    document_number: formData.get("document_number") ?? "",
+    notes: formData.get("notes") ?? "",
   });
 
   if (!parsed.success) {
