@@ -74,6 +74,7 @@ export async function reconcileWithNewEntryAction(_prev: FormState, formData: Fo
     payment_method_id: formData.get("payment_method_id") ?? "",
     document_number: formData.get("document_number") ?? "",
     notes: formData.get("notes") ?? "",
+    competence_date: formData.get("competence_date") ?? "",
   });
 
   if (!parsed.success) {
@@ -93,6 +94,7 @@ export async function reconcileWithNewEntryAction(_prev: FormState, formData: Fo
     p_payment_method_id: emptyToNull(parsed.data.payment_method_id),
     p_document_number: emptyToNull(parsed.data.document_number),
     p_notes: emptyToNull(parsed.data.notes),
+    p_competence_date: emptyToNull(parsed.data.competence_date),
   });
 
   if (error) {

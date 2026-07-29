@@ -178,7 +178,9 @@ quais categorias mais pesaram na diferença.
    - **Criar um novo lançamento** — quando a transação não tinha um lançamento correspondente.
      Se uma transação parecida (mesma origem, ex.: SABESP) já tiver sido classificada antes, os
      campos de categoria, contraparte, centro de custo e forma de pagamento já vêm preenchidos
-     automaticamente com a última classificação usada — confira e ajuste se não for o caso.
+     automaticamente com a última classificação usada — confira e ajuste se não for o caso. A
+     data de competência já vem preenchida com a data da transação; mude-a se a competência for
+     de outro mês (ex.: uma conta paga em atraso).
    - **Ignorar** — quando não é algo que deva virar um lançamento (pode reverter depois).
 5. É possível **desfazer** uma conciliação já feita, se tiver sido um engano.
 

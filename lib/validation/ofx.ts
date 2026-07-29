@@ -34,4 +34,5 @@ export const reconcileNewEntrySchema = z.object({
   payment_method_id: z.string().uuid().optional().or(z.literal("")),
   document_number: z.string().optional().or(z.literal("")),
   notes: z.string().optional().or(z.literal("")),
+  competence_date: z.string().optional().or(z.literal("")),
 });

@@ -183,6 +183,7 @@ export default async function ConciliacaoPage({
                       bankTransactionId={t.id}
                       amount={t.amount}
                       description={t.description}
+                      transactionDate={t.transaction_date}
                       openEntries={t.amount >= 0 ? receitasWithRemaining : despesasWithRemaining}
                       categories={categories ?? []}
                       subcategories={subcategories ?? []}

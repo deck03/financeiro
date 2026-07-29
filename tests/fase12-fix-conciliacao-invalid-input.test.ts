@@ -39,3 +39,21 @@ describe("Correção — 'Invalid input' ao criar lançamento pela conciliação
     expect(result.success).toBe(false);
   });
 });
+
+describe("Melhoria — data de competência ao criar lançamento pela conciliação", () => {
+  it("aceita a competência informada", () => {
+    const result = reconcileNewEntrySchema.safeParse({
+      ...base,
+      competence_date: "2026-07-20",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("aceita sem competência informada (o banco usa a data da transação como padrão)", () => {
+    const result = reconcileNewEntrySchema.safeParse({
+      ...base,
+      competence_date: "",
+    });
+    expect(result.success).toBe(true);
+  });
+});

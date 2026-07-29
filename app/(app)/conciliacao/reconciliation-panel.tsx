@@ -42,6 +42,7 @@ export function ReconciliationPanel({
   bankTransactionId,
   amount,
   description,
+  transactionDate,
   openEntries,
   categories,
   subcategories,
@@ -53,6 +54,7 @@ export function ReconciliationPanel({
   bankTransactionId: string;
   amount: number;
   description: string;
+  transactionDate: string;
   openEntries: OpenEntry[];
   categories: Option[];
   subcategories: (Option & { category_id: string })[];
@@ -149,6 +151,19 @@ export function ReconciliationPanel({
         <div>
           <Label htmlFor={`desc-${bankTransactionId}`}>Descrição</Label>
           <Input id={`desc-${bankTransactionId}`} name="description" defaultValue={description} />
+        </div>
+        <div>
+          <Label htmlFor={`comp-${bankTransactionId}`}>Data de competência</Label>
+          <Input
+            id={`comp-${bankTransactionId}`}
+            name="competence_date"
+            type="date"
+            defaultValue={transactionDate}
+          />
+          <p className="mt-1 text-xs text-ink-faint">
+            Já vem com a data da transação — mude se o mês de referência for outro (ex.: conta
+            paga em atraso).
+          </p>
         </div>
         <div>
           <Label htmlFor={`cat-${bankTransactionId}`}>Categoria</Label>

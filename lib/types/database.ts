@@ -1413,6 +1413,7 @@ export type Database = {
           p_payment_method_id?: string | null;
           p_document_number?: string | null;
           p_notes?: string | null;
+          p_competence_date?: string | null;
         };
         Returns: string;
       };

@@ -1943,3 +1943,42 @@ Corrigido convertendo `null` em string vazia antes de validar, em
 correto (não precisou de ajuste). 3 testes novos reproduzem o bug e confirmam a correção. Total
 do projeto: 157 testes, todos passando. Sem mudança de banco de dados.
 
+---
+
+# Melhoria + correção — data de competência na conciliação bancária
+
+## O que foi pedido
+
+Ao criar um lançamento direto da conciliação bancária, não havia como informar a data de
+competência.
+
+## O que a investigação revelou
+
+`reconcile_with_new_entry()` **nunca gravava competência nenhuma** — todo lançamento criado
+pela conciliação ficava com `competence_date` nulo. Isso não é só uma questão de completude: um
+lançamento sem competência **não aparece em nenhum período da DRE em regime de competência** (a
+consulta filtra por `competence_date` entre duas datas — nulo nunca bate com nenhum intervalo).
+Ou seja, além de faltar o campo no formulário, os lançamentos vindos da conciliação estavam
+silenciosamente ausentes da DRE por competência.
+
+## O que foi feito
+
+- Novo campo **"Data de competência"** no formulário de "Criar lançamento" da conciliação — já
+  vem preenchido com a data da própria transação bancária (o padrão mais razoável), mas pode
+  ser mudado (por exemplo, uma conta paga em atraso, cuja competência é de um mês anterior ao
+  pagamento).
+- `reconcile_with_new_entry()` agora grava competência sempre — se nada for informado, usa a
+  data da transação como padrão (nunca mais fica nulo).
+- **Correção retroativa**: lançamentos já criados pela conciliação antes desta migration, que
+  ficaram com competência nula, foram corrigidos automaticamente (competência = vencimento) —
+  só nesses casos com competência ainda vazia; nada que já tinha um valor é sobrescrito.
+
+## Migration
+
+`supabase/migrations/0015_competencia_conciliacao.sql`.
+
+## Testes
+
+2 testes novos, na sequência de `tests/fase12-fix-conciliacao-invalid-input.test.ts`. Total do
+projeto: 159 testes, todos passando.
+
