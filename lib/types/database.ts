@@ -1152,6 +1152,9 @@ export type Database = {
           verification_code: string;
           file_path: string | null;
           status: string;
+          cancelled_at: string | null;
+          cancelled_by: string | null;
+          cancel_reason: string | null;
           created_at: string;
           created_by: string | null;
         };
@@ -1174,6 +1177,9 @@ export type Database = {
           verification_code: string;
           file_path?: string | null;
           status?: string;
+          cancelled_at?: string | null;
+          cancelled_by?: string | null;
+          cancel_reason?: string | null;
           created_at?: string;
           created_by?: string | null;
         };
@@ -1196,6 +1202,9 @@ export type Database = {
           verification_code?: string;
           file_path?: string | null;
           status?: string;
+          cancelled_at?: string | null;
+          cancelled_by?: string | null;
+          cancel_reason?: string | null;
           created_at?: string;
           created_by?: string | null;
         };
@@ -1432,6 +1441,13 @@ export type Database = {
           p_verification_code?: string | null;
         };
         Returns: string;
+      };
+      cancel_rent_receipt: {
+        Args: {
+          p_receipt_id: string;
+          p_reason?: string | null;
+        };
+        Returns: undefined;
       };
     };
     Enums: Record<string, never>;

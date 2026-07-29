@@ -1782,3 +1782,39 @@ relatado (início 24/08/2026, mensal, ajuste de dia útil) e confirmando que a c
 dia 24 ancorado, ajustando cada ocorrência individualmente. Total do projeto: 138 testes, todos
 passando.
 
+---
+
+# Ajuste — completa a parte de Recibos: cancelamento
+
+A coluna `rent_receipts.status` (ativo/cancelado) existia desde a Fase 10, mas nunca foi
+implementada nenhuma função, tela ou botão para cancelar um recibo emitido por engano — a
+funcionalidade tinha ficado pela metade.
+
+## O que foi completado
+
+- **`cancel_rent_receipt()`** — nova função no banco que marca o recibo como cancelado. Nunca
+  apaga o registro (a numeração sequencial precisa ficar rastreável mesmo cancelada) e grava
+  quem cancelou, quando, e o motivo informado.
+- **Botão "Cancelar recibo"** na tela de detalhe, visível para quem tem a permissão de gerar
+  recibos, com confirmação e campo de motivo opcional.
+- **Indicação visual clara** — badge "Cancelado" na listagem e na tela de detalhe, com um aviso
+  de que o PDF não deve mais ser considerado válido (o arquivo continua disponível para
+  consulta, mas nesta fase não é regravado com marca d'água de cancelamento).
+- **Reemissão liberada** — depois de cancelar um recibo, a liquidação de origem fica livre para
+  receber um novo recibo (antes, a checagem de "já existe recibo" bloqueava mesmo com o recibo
+  cancelado).
+- A tela de emissão de recibo agora também mostra, antes de gerar, qual **vencimento** e qual
+  **referência** serão usados — para conferir antes de criar um documento numerado (que depois
+  só pode ser cancelado, não editado).
+
+## Migration
+
+`supabase/migrations/0013_cancelamento_recibos.sql` — adiciona `cancelled_at`, `cancelled_by`,
+`cancel_reason` a `rent_receipts`; cria `cancel_rent_receipt()`; atualiza `create_rent_receipt()`
+para só bloquear reemissão quando já existir um recibo **ativo** (não qualquer recibo).
+
+## Testes
+
+4 testes novos em `tests/fase12-fix-cancelar-recibo.test.ts`. Total do projeto: 142 testes,
+todos passando.
+

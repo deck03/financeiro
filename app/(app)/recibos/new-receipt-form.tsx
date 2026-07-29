@@ -16,7 +16,13 @@ function SubmitButton() {
   );
 }
 
-export function NewReceiptForm({ settlementId }: { settlementId: string }) {
+export function NewReceiptForm({
+  settlementId,
+  suggestedReference,
+}: {
+  settlementId: string;
+  suggestedReference: string | null;
+}) {
   const [state, formAction] = useFormState(generateReceiptAction, initialState);
 
   return (
@@ -25,10 +31,15 @@ export function NewReceiptForm({ settlementId }: { settlementId: string }) {
 
       <div>
         <Label htmlFor="reference_period">Referência (competência)</Label>
-        <Input id="reference_period" name="reference_period" placeholder="Preenchido automaticamente a partir da competência do lançamento" />
+        <Input
+          id="reference_period"
+          name="reference_period"
+          placeholder={suggestedReference ?? "Ex.: Julho/2026"}
+        />
         <p className="mt-1 text-xs text-ink-faint">
-          Deixe em branco para usar a competência do lançamento automaticamente (ex.:
-          &quot;Julho/2026&quot;). Só preencha aqui se quiser um texto diferente.
+          {suggestedReference
+            ? `Deixe em branco para usar "${suggestedReference}" (competência do lançamento). Só preencha se quiser um texto diferente.`
+            : "Não foi possível calcular a referência automaticamente — informe manualmente."}
         </p>
       </div>
       <div>

@@ -1,6 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
+import { hasPermission } from "@/lib/permissions";
 import { Card } from "@/components/ui/card";
 import { DownloadReceiptButton } from "../download-receipt-button";
+import { CancelReceiptForm } from "../cancel-receipt-form";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 
@@ -15,11 +17,12 @@ function formatDate(value: string) {
 
 export default async function ReciboDetalhePage({ params }: { params: { id: string } }) {
   const supabase = createClient();
+  const canCancel = await hasPermission("gerar_recibos");
 
   const { data: receipt } = await supabase
     .from("rent_receipts")
     .select(
-      "id, receipt_number_formatted, amount, amount_in_words, payment_date, due_date, reference_period, space_description, notes, verification_code, file_path, entry_id, counterparties(name, document_number)"
+      "id, receipt_number_formatted, amount, amount_in_words, payment_date, due_date, reference_period, space_description, notes, verification_code, file_path, entry_id, status, cancel_reason, counterparties(name, document_number)"
     )
     .eq("id", params.id)
     .single();
@@ -31,9 +34,23 @@ export default async function ReciboDetalhePage({ params }: { params: { id: stri
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-xl font-semibold text-ink">Recibo {receipt.receipt_number_formatted}</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-xl font-semibold text-ink">Recibo {receipt.receipt_number_formatted}</h1>
+          {receipt.status === "cancelado" && (
+            <span className="inline-flex items-center rounded-full bg-signal-negativeSoft px-2.5 py-0.5 text-xs font-medium text-signal-negative">
+              Cancelado
+            </span>
+          )}
+        </div>
         <p className="text-sm text-ink-soft">{counterparty?.name}</p>
       </div>
+
+      {receipt.status === "cancelado" && (
+        <div className="rounded-card border border-signal-negative/30 bg-signal-negativeSoft/40 px-4 py-3 text-sm text-ink">
+          Este recibo foi cancelado{receipt.cancel_reason ? ` — motivo: ${receipt.cancel_reason}` : ""}. O PDF
+          continua disponível para consulta, mas não deve ser considerado válido.
+        </div>
+      )}
 
       <Card>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -80,6 +97,12 @@ export default async function ReciboDetalhePage({ params }: { params: { id: stri
             Ver lançamento de origem
           </Link>
         </div>
+
+        {canCancel && receipt.status === "ativo" && (
+          <div className="mt-4">
+            <CancelReceiptForm receiptId={receipt.id} />
+          </div>
+        )}
       </Card>
     </div>
   );

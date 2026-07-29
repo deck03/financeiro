@@ -5,11 +5,12 @@ import { requirePermission } from "@/lib/permissions";
 import { amountInWords } from "@/lib/receipts/amount-in-words";
 import { generateReceiptPdf } from "@/lib/receipts/generate-pdf";
 import { formatReferencePeriod } from "@/lib/receipts/reference-period";
+import { cancelReceiptSchema } from "@/lib/validation/recibos";
 import { revalidatePath } from "next/cache";
 import { logAudit } from "@/lib/audit";
 import { redirect } from "next/navigation";
 
-export type FormState = { error?: string };
+export type FormState = { error?: string; success?: boolean };
 
 export async function generateReceiptAction(_prev: FormState, formData: FormData): Promise<FormState> {
   try {
@@ -147,4 +148,50 @@ export async function generateReceiptAction(_prev: FormState, formData: FormData
 
   revalidatePath("/recibos");
   redirect(`/recibos/${receiptId}`);
+}
+
+// ---------------------------------------------------------------------------
+// Cancelar um recibo emitido por engano.
+//
+// Nunca apaga o registro — a numeração sequencial precisa ficar rastreável
+// mesmo cancelada (mesma lógica de nunca excluir dados usada no resto do
+// sistema). Depois de cancelado, a liquidação fica livre para receber um
+// novo recibo (create_rent_receipt só bloqueia se já existir um ATIVO).
+// ---------------------------------------------------------------------------
+export async function cancelReceiptAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  const parsed = cancelReceiptSchema.safeParse({
+    receipt_id: formData.get("receipt_id"),
+    reason: formData.get("reason"),
+  });
+
+  if (!parsed.success) {
+    return { error: "Dados inválidos." };
+  }
+
+  try {
+    await requirePermission("gerar_recibos");
+  } catch {
+    return { error: "Você não tem permissão para cancelar recibos." };
+  }
+
+  const supabase = createClient();
+  const { error } = await supabase.rpc("cancel_rent_receipt", {
+    p_receipt_id: parsed.data.receipt_id,
+    p_reason: parsed.data.reason || null,
+  });
+
+  if (error) {
+    return { error: error.message.includes("Sem permissão") ? "Você não tem permissão para esta ação." : error.message };
+  }
+
+  await logAudit({
+    action: "cancelar",
+    entity: "rent_receipts",
+    entityId: parsed.data.receipt_id,
+    metadata: { motivo: parsed.data.reason || null },
+  });
+
+  revalidatePath("/recibos");
+  revalidatePath(`/recibos/${parsed.data.receipt_id}`);
+  return { success: true };
 }

@@ -195,6 +195,12 @@ Para locatários cadastrados, depois de registrar o recebimento do aluguel:
 4. O recibo fica guardado automaticamente na lista de **Recibos** — dá para baixar quantas
    vezes precisar.
 
+Se um recibo foi emitido errado, abra-o e clique em **Cancelar recibo** (não dá para editar um
+recibo já gerado). O número fica marcado como cancelado — visível na listagem com um selo
+vermelho — mas nunca é reutilizado nem apagado, para manter a numeração sequencial rastreável.
+Depois de cancelado, o mesmo recebimento fica livre para receber um novo recibo, se precisar
+emitir de novo.
+
 Para os dados bancários aparecerem corretamente no recibo, preencha o **código do banco** (ex.:
 341 para Itaú) e a **chave Pix** no cadastro da conta bancária usada para receber os aluguéis
 (seção 16 — Cadastros → Contas bancárias).

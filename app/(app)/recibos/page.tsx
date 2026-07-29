@@ -36,11 +36,17 @@ export default async function RecibosPage() {
                 <th className="py-2 pr-4 font-medium">Data</th>
                 <th className="py-2 pr-4 font-medium">Período</th>
                 <th className="py-2 pr-4 font-medium num">Valor</th>
+                <th className="py-2 pr-4 font-medium">Status</th>
               </tr>
             </thead>
             <tbody>
               {(receipts ?? []).map((r: any) => (
-                <tr key={r.id} className="border-b border-base-border last:border-0 hover:bg-base-bg">
+                <tr
+                  key={r.id}
+                  className={`border-b border-base-border last:border-0 hover:bg-base-bg ${
+                    r.status === "cancelado" ? "opacity-60" : ""
+                  }`}
+                >
                   <td className="py-2 pr-4">
                     <Link href={`/recibos/${r.id}`} className="text-ink hover:text-brand-accent hover:underline">
                       {r.receipt_number_formatted}
@@ -50,11 +56,22 @@ export default async function RecibosPage() {
                   <td className="py-2 pr-4 text-ink-soft">{formatDate(r.payment_date)}</td>
                   <td className="py-2 pr-4 text-ink-soft">{r.reference_period ?? "—"}</td>
                   <td className="num py-2 pr-4 text-ink">{formatCurrency(r.amount)}</td>
+                  <td className="py-2 pr-4">
+                    {r.status === "cancelado" ? (
+                      <span className="inline-flex items-center rounded-full bg-signal-negativeSoft px-2.5 py-0.5 text-xs font-medium text-signal-negative">
+                        Cancelado
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center rounded-full bg-signal-positiveSoft px-2.5 py-0.5 text-xs font-medium text-signal-positive">
+                        Ativo
+                      </span>
+                    )}
+                  </td>
                 </tr>
               ))}
               {(receipts ?? []).length === 0 && (
                 <tr>
-                  <td colSpan={5} className="py-6 text-center text-ink-faint">
+                  <td colSpan={6} className="py-6 text-center text-ink-faint">
                     Nenhum recibo emitido ainda. Emita um recibo a partir de um recebimento
                     confirmado em Contas a Receber.
                   </td>
