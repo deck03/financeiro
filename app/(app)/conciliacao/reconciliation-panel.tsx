@@ -29,6 +29,14 @@ function SubmitButton({ label }: { label: string }) {
 
 type OpenEntry = { id: string; description: string; remaining: number; due_date: string };
 type Option = { id: string; name: string };
+type Suggestion = {
+  categoryId: string | null;
+  subcategoryId: string | null;
+  costCenterId: string | null;
+  counterpartyId: string | null;
+  paymentMethodId: string | null;
+  sourceDescription: string;
+};
 
 export function ReconciliationPanel({
   bankTransactionId,
@@ -40,6 +48,7 @@ export function ReconciliationPanel({
   costCenters,
   counterparties,
   paymentMethods,
+  suggestion,
 }: {
   bankTransactionId: string;
   amount: number;
@@ -50,12 +59,15 @@ export function ReconciliationPanel({
   costCenters: Option[];
   counterparties: Option[];
   paymentMethods: Option[];
+  suggestion?: Suggestion | null;
 }) {
   const [mode, setMode] = useState<"closed" | "existing" | "new">("closed");
   const [isPending, startTransition] = useTransition();
   const [existingState, existingAction] = useFormState(reconcileWithExistingEntryAction, initialState);
   const [newState, newAction] = useFormState(reconcileWithNewEntryAction, initialState);
-  const [selectedCategory, setSelectedCategory] = useState("");
+  // Já abre com a categoria sugerida marcada (quando existe), para as
+  // subcategorias filtrarem certo assim que o formulário aparece.
+  const [selectedCategory, setSelectedCategory] = useState(suggestion?.categoryId ?? "");
 
   if (existingState.success || newState.success) {
     return <span className="text-xs text-ink-faint">Conciliada</span>;
@@ -63,7 +75,7 @@ export function ReconciliationPanel({
 
   if (mode === "closed") {
     return (
-      <div className="flex gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         <button type="button" onClick={() => setMode("existing")} className="text-sm font-medium text-brand-accent hover:underline">
           Vincular a lançamento
         </button>
@@ -78,6 +90,11 @@ export function ReconciliationPanel({
         >
           Ignorar
         </button>
+        {suggestion && (
+          <span className="text-xs text-ink-faint">
+            Sugestão disponível de &quot;{categories.find((c) => c.id === suggestion.categoryId)?.name ?? "uma classificação anterior"}&quot;
+          </span>
+        )}
       </div>
     );
   }
@@ -122,6 +139,12 @@ export function ReconciliationPanel({
   return (
     <form action={newAction} className="space-y-2 rounded-card border border-base-border bg-base-bg p-3">
       <input type="hidden" name="bank_transaction_id" value={bankTransactionId} />
+      {suggestion && (
+        <p className="rounded-card bg-brand-accentSoft px-2 py-1.5 text-xs text-brand-accent">
+          Campos preenchidos a partir de uma transação parecida, classificada antes como
+          &quot;{suggestion.sourceDescription}&quot;. Confira e ajuste se não for o caso.
+        </p>
+      )}
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         <div>
           <Label htmlFor={`desc-${bankTransactionId}`}>Descrição</Label>
@@ -148,7 +171,12 @@ export function ReconciliationPanel({
         </div>
         <div>
           <Label htmlFor={`subcat-${bankTransactionId}`}>Subcategoria (opcional)</Label>
-          <Select id={`subcat-${bankTransactionId}`} name="subcategory_id" defaultValue="" disabled={filteredSubcategories.length === 0}>
+          <Select
+            id={`subcat-${bankTransactionId}`}
+            name="subcategory_id"
+            defaultValue={suggestion?.subcategoryId ?? ""}
+            disabled={filteredSubcategories.length === 0}
+          >
             <option value="">Nenhuma</option>
             {filteredSubcategories.map((s) => (
               <option key={s.id} value={s.id}>
@@ -159,7 +187,7 @@ export function ReconciliationPanel({
         </div>
         <div>
           <Label htmlFor={`cp-${bankTransactionId}`}>Contraparte (opcional)</Label>
-          <Select id={`cp-${bankTransactionId}`} name="counterparty_id" defaultValue="">
+          <Select id={`cp-${bankTransactionId}`} name="counterparty_id" defaultValue={suggestion?.counterpartyId ?? ""}>
             <option value="">Nenhuma</option>
             {counterparties.map((c) => (
               <option key={c.id} value={c.id}>
@@ -170,7 +198,7 @@ export function ReconciliationPanel({
         </div>
         <div>
           <Label htmlFor={`cc-${bankTransactionId}`}>Centro de custo (opcional)</Label>
-          <Select id={`cc-${bankTransactionId}`} name="cost_center_id" defaultValue="">
+          <Select id={`cc-${bankTransactionId}`} name="cost_center_id" defaultValue={suggestion?.costCenterId ?? ""}>
             <option value="">Nenhum</option>
             {costCenters.map((c) => (
               <option key={c.id} value={c.id}>
@@ -181,7 +209,7 @@ export function ReconciliationPanel({
         </div>
         <div>
           <Label htmlFor={`pm-${bankTransactionId}`}>Forma de pagamento (opcional)</Label>
-          <Select id={`pm-${bankTransactionId}`} name="payment_method_id" defaultValue="">
+          <Select id={`pm-${bankTransactionId}`} name="payment_method_id" defaultValue={suggestion?.paymentMethodId ?? ""}>
             <option value="">Nenhuma</option>
             {paymentMethods.map((m) => (
               <option key={m.id} value={m.id}>

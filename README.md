@@ -1883,3 +1883,48 @@ que a coluna gerada `hash_dedupe_key` implementa. Total do projeto: 146 testes, 
 Nenhuma transação daquelas tentativas foi salva — não há nada para limpar ou desfazer. Depois
 de aplicar esta correção, basta importar o arquivo `.ofx` novamente.
 
+---
+
+# Melhoria — sugestão automática na conciliação bancária
+
+## O que foi pedido
+
+Ao classificar uma transação (categoria, centro de custo, contraparte etc.) durante a
+conciliação, o sistema não aproveitava nada do que já tinha sido classificado antes — mesmo que
+a mesma origem (ex.: SABESP) aparecesse todo mês. Cada transação nova começava com o formulário
+em branco.
+
+## Como funciona agora
+
+Ao clicar em **"Criar lançamento"** para uma transação pendente, o sistema procura no histórico
+uma transação anterior com **descrição parecida** (ignorando números — datas, valores,
+referências — que mudam a cada vez, mas mantendo as palavras que identificam a origem) e do
+**mesmo tipo** (entrada ou saída). Se encontrar, os campos de **categoria, subcategoria,
+contraparte, centro de custo e forma de pagamento** já vêm preenchidos com a última classificação
+usada para aquela origem — com um aviso explicando de onde veio a sugestão, e todos os campos
+continuam editáveis antes de confirmar.
+
+Exemplo: se em julho você classificou uma transação "SABESP REF 0001234" como categoria "Água",
+em agosto uma transação "SABESP REF 0009876" já chega com "Água" pré-selecionada.
+
+- A sugestão é sempre baseada na classificação **mais recente** para aquela origem — se você
+  mudar a forma de classificar algo, a próxima sugestão já reflete a mudança.
+- Nunca decide sozinho: é sempre uma sugestão pré-preenchida, nunca uma ação automática — você
+  sempre confirma (ou ajusta) antes de salvar.
+- Quando não há transação parecida suficiente no histórico, o formulário continua em branco
+  como antes.
+
+## Arquivos
+
+- `lib/finance/description-normalize.ts` — normalização da descrição (remove números, acentos e
+  pontuação) para reconhecer a mesma origem em transações diferentes.
+- `lib/conciliacao/suggestions.ts` — monta o índice de sugestões a partir do histórico de
+  conciliações anteriores.
+
+Nenhuma mudança de banco de dados — usa os mesmos dados que já existiam.
+
+## Testes
+
+8 testes novos em `tests/fase12-conciliacao-sugestao.test.ts`. Total do projeto: 154 testes,
+todos passando.
+

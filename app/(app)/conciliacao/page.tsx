@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ReconciliationPanel } from "./reconciliation-panel";
 import { UndoReconciliationButton, UnignoreButton } from "./reconciliation-buttons";
 import { computeRemainingBalance } from "@/lib/finance/remaining";
+import { buildReconciliationSuggestionIndex, suggestionKey } from "@/lib/conciliacao/suggestions";
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
@@ -114,6 +115,12 @@ export default async function ConciliacaoPage({
   const despesasWithRemaining = await withRemaining(openDespesas ?? []);
   const receitasWithRemaining = await withRemaining(openReceitas ?? []);
 
+  // Sugestão de categoria/contraparte/centro de custo com base em transações
+  // parecidas já classificadas antes (ex.: SABESP sempre como "Água") — só
+  // vale a pena calcular se houver algo pendente para sugerir.
+  const suggestionIndex =
+    (pending ?? []).length > 0 ? await buildReconciliationSuggestionIndex(supabase) : new Map();
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -182,6 +189,7 @@ export default async function ConciliacaoPage({
                       costCenters={costCenters ?? []}
                       counterparties={counterparties ?? []}
                       paymentMethods={paymentMethods ?? []}
+                      suggestion={suggestionIndex.get(suggestionKey(t.description, t.amount)) ?? null}
                     />
                   </div>
                 )}

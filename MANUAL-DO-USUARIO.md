@@ -176,6 +176,9 @@ quais categorias mais pesaram na diferença.
    - **Vincular a um lançamento existente** — quando a transação do banco corresponde a uma
      conta a pagar/receber que já estava cadastrada.
    - **Criar um novo lançamento** — quando a transação não tinha um lançamento correspondente.
+     Se uma transação parecida (mesma origem, ex.: SABESP) já tiver sido classificada antes, os
+     campos de categoria, contraparte, centro de custo e forma de pagamento já vêm preenchidos
+     automaticamente com a última classificação usada — confira e ajuste se não for o caso.
    - **Ignorar** — quando não é algo que deva virar um lançamento (pode reverter depois).
 5. É possível **desfazer** uma conciliação já feita, se tiver sido um engano.
 
