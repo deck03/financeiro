@@ -1,10 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
 import { hasPermission } from "@/lib/permissions";
 import { Card } from "@/components/ui/card";
-import { StatusBadge } from "@/components/ui/status-badge";
-import { ToggleStatusButton } from "@/components/ui/toggle-status-button";
 import { NewCostCenterForm } from "./new-cost-center-form";
-import { toggleCostCenterStatusAction, setDefaultCostCenterAction } from "./actions";
+import { CostCenterRow } from "./cost-center-row";
 
 export default async function CentrosDeCustoPage() {
   const supabase = createClient();
@@ -42,34 +40,7 @@ export default async function CentrosDeCustoPage() {
             </thead>
             <tbody>
               {(costCenters ?? []).map((cc) => (
-                <tr key={cc.id} className="border-b border-base-border last:border-0">
-                  <td className="py-2 pr-4 text-ink">{cc.name}</td>
-                  <td className="py-2 pr-4 text-ink-soft">
-                    {cc.is_default ? (
-                      <span className="text-brand-accent">Padrão</span>
-                    ) : canEdit ? (
-                      <ToggleStatusButton
-                        isActive={false}
-                        activeLabel="Definir como padrão"
-                        inactiveLabel="Definir como padrão"
-                        action={setDefaultCostCenterAction.bind(null, cc.id)}
-                      />
-                    ) : (
-                      "—"
-                    )}
-                  </td>
-                  <td className="py-2 pr-4">
-                    <StatusBadge status={cc.status} />
-                  </td>
-                  {canEdit && (
-                    <td className="py-2 pr-4">
-                      <ToggleStatusButton
-                        isActive={cc.status === "ativo"}
-                        action={toggleCostCenterStatusAction.bind(null, cc.id, cc.status)}
-                      />
-                    </td>
-                  )}
-                </tr>
+                <CostCenterRow key={cc.id} costCenter={cc} canEdit={canEdit} />
               ))}
               {(costCenters ?? []).length === 0 && (
                 <tr>

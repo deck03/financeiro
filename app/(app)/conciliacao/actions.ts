@@ -153,9 +153,14 @@ export async function deletePendingTransactionsAction(
   }
 
   const supabase = createClient();
-  const { data, error } = await supabase.rpc("delete_pending_bank_transactions", {
+  // O cast abaixo evita que o build quebre se lib/types/database.ts estiver
+  // um passo atrás desta função no banco (ex.: o arquivo não subiu junto
+  // numa atualização feita por arrasta-e-solta) — a chamada em si continua
+  // funcionando normalmente, só a checagem de tipo estrita é contornada
+  // para este nome de função específico.
+  const { data, error } = (await (supabase.rpc as any)("delete_pending_bank_transactions", {
     p_bank_account_id: bankAccountId,
-  });
+  })) as { data: number | null; error: { message: string } | null };
 
   if (error) {
     return { error: "Não foi possível excluir as transações pendentes." };

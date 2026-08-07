@@ -31,6 +31,7 @@ export type AuditAction =
   | "desfazer_conciliacao"
   | "ignorar"
   | "reativar"
+  | "excluir"
   | "gerar"
   | "enviar"
   | "exportar"

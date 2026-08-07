@@ -11,6 +11,7 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   desfazer_conciliacao: "Desfez conciliação",
   ignorar: "Ignorou",
   reativar: "Reativou",
+  excluir: "Excluiu",
   gerar: "Gerou",
   enviar: "Enviou",
   exportar: "Exportou",

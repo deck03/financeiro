@@ -1,12 +1,12 @@
 import { createClient } from "@/lib/supabase/server";
 import { hasPermission } from "@/lib/permissions";
 import { Card } from "@/components/ui/card";
-import { StatusBadge } from "@/components/ui/status-badge";
-import { ToggleStatusButton } from "@/components/ui/toggle-status-button";
 import { NewFamilyForm } from "./new-family-form";
 import { NewCategoryForm } from "./new-category-form";
 import { NewSubcategoryForm } from "./new-subcategory-form";
-import { toggleFamilyStatusAction, toggleCategoryStatusAction, toggleSubcategoryStatusAction } from "./actions";
+import { FamilyRow } from "./family-row";
+import { CategoryRow } from "./category-row";
+import { SubcategoryRow } from "./subcategory-row";
 import {
   FAMILY_TYPE_LABELS,
   MANAGERIAL_NATURE_LABELS,
@@ -68,21 +68,7 @@ export default async function PlanoDeContasPage() {
             </thead>
             <tbody>
               {(families ?? []).map((f) => (
-                <tr key={f.id} className="border-b border-base-border last:border-0">
-                  <td className="py-2 pr-4 text-ink">{f.name}</td>
-                  <td className="py-2 pr-4 text-ink-soft">{FAMILY_TYPE_LABELS[f.type]}</td>
-                  <td className="py-2 pr-4">
-                    <StatusBadge status={f.status} />
-                  </td>
-                  {canEdit && (
-                    <td className="py-2 pr-4">
-                      <ToggleStatusButton
-                        isActive={f.status === "ativo"}
-                        action={toggleFamilyStatusAction.bind(null, f.id, f.status)}
-                      />
-                    </td>
-                  )}
-                </tr>
+                <FamilyRow key={f.id} family={f} canEdit={canEdit} />
               ))}
               {(families ?? []).length === 0 && (
                 <tr>
@@ -119,28 +105,12 @@ export default async function PlanoDeContasPage() {
             </thead>
             <tbody>
               {(categories ?? []).map((c: any) => (
-                <tr key={c.id} className="border-b border-base-border last:border-0">
-                  <td className="py-2 pr-4 text-ink">{c.name}</td>
-                  <td className="py-2 pr-4 text-ink-soft">{c.chart_account_families?.name}</td>
-                  <td className="py-2 pr-4 text-ink-soft">
-                    {MANAGERIAL_NATURE_LABELS[c.managerial_nature]}
-                  </td>
-                  <td className="py-2 pr-4 text-ink-soft">{DRE_BEHAVIOR_LABELS[c.dre_behavior]}</td>
-                  <td className="py-2 pr-4 text-ink-soft">
-                    {CASHFLOW_BEHAVIOR_LABELS[c.cashflow_behavior]}
-                  </td>
-                  <td className="py-2 pr-4">
-                    <StatusBadge status={c.status} />
-                  </td>
-                  {canEdit && (
-                    <td className="py-2 pr-4">
-                      <ToggleStatusButton
-                        isActive={c.status === "ativo"}
-                        action={toggleCategoryStatusAction.bind(null, c.id, c.status)}
-                      />
-                    </td>
-                  )}
-                </tr>
+                <CategoryRow
+                  key={c.id}
+                  category={c}
+                  families={activeFamilies.map((f) => ({ id: f.id, name: f.name }))}
+                  canEdit={canEdit}
+                />
               ))}
               {(categories ?? []).length === 0 && (
                 <tr>
@@ -179,22 +149,17 @@ export default async function PlanoDeContasPage() {
               </tr>
             </thead>
             <tbody>
-              {(subcategories ?? []).map((s: any) => (
-                <tr key={s.id} className="border-b border-base-border last:border-0">
-                  <td className="py-2 pr-4 text-ink">{s.name}</td>
-                  <td className="py-2 pr-4 text-ink-soft">{s.chart_account_categories?.name}</td>
-                  <td className="py-2 pr-4">
-                    <StatusBadge status={s.status} />
-                  </td>
-                  {canEdit && (
-                    <td className="py-2 pr-4">
-                      <ToggleStatusButton
-                        isActive={s.status === "ativo"}
-                        action={toggleSubcategoryStatusAction.bind(null, s.id, s.status)}
-                      />
-                    </td>
-                  )}
-                </tr>
+              {(subcategories ?? []).map((sc: any) => (
+                <SubcategoryRow
+                  key={sc.id}
+                  subcategory={sc}
+                  categories={activeCategories.map((c: any) => ({
+                    id: c.id,
+                    name: c.name,
+                    family_name: c.chart_account_families?.name ?? "",
+                  }))}
+                  canEdit={canEdit}
+                />
               ))}
               {(subcategories ?? []).length === 0 && (
                 <tr>

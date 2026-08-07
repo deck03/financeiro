@@ -73,3 +73,59 @@ export async function setDefaultCostCenterAction(id: string) {
   await logAudit({ action: "editar", entity: "cost_centers", entityId: id, metadata: { acao: "definido como padrão" } });
   revalidatePath("/cadastros/centros-de-custo");
 }
+
+export async function updateCostCenterAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  try {
+    await requirePermission("alterar_centros_de_custo");
+  } catch {
+    return { error: "Você não tem permissão para alterar centros de custo." };
+  }
+
+  const id = formData.get("id") as string;
+  const parsed = costCenterSchema.safeParse({
+    name: formData.get("name"),
+    code: formData.get("code"),
+  });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
+  }
+
+  const { supabase, userId } = await getOrgIdAndUser();
+  const { data: before } = await supabase.from("cost_centers").select("name, code").eq("id", id).single();
+  const { error } = await supabase
+    .from("cost_centers")
+    .update({ name: parsed.data.name, code: parsed.data.code || null, updated_by: userId })
+    .eq("id", id);
+
+  if (error) return { error: "Não foi possível atualizar o centro de custo." };
+  await logAudit({
+    action: "editar",
+    entity: "cost_centers",
+    entityId: id,
+    previousValue: before ?? null,
+    newValue: { name: parsed.data.name, code: parsed.data.code || null },
+  });
+  revalidatePath("/cadastros/centros-de-custo");
+  return { success: true };
+}
+
+export async function deleteCostCenterAction(id: string): Promise<{ error?: string }> {
+  try {
+    await requirePermission("alterar_centros_de_custo");
+  } catch {
+    return { error: "Você não tem permissão para excluir centros de custo." };
+  }
+
+  const { supabase } = await getOrgIdAndUser();
+  const { data: item } = await supabase.from("cost_centers").select("name").eq("id", id).single();
+  const { error } = await supabase.from("cost_centers").delete().eq("id", id);
+
+  if (error) {
+    const { translateDeleteError } = await import("@/lib/cadastros/delete-error");
+    return { error: translateDeleteError(error, item?.name ?? "este centro de custo") };
+  }
+
+  await logAudit({ action: "excluir", entity: "cost_centers", entityId: id, metadata: { nome: item?.name } });
+  revalidatePath("/cadastros/centros-de-custo");
+  return {};
+}

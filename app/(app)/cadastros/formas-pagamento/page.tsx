@@ -1,10 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
 import { hasPermission } from "@/lib/permissions";
 import { Card } from "@/components/ui/card";
-import { StatusBadge } from "@/components/ui/status-badge";
-import { ToggleStatusButton } from "@/components/ui/toggle-status-button";
 import { NewPaymentMethodForm } from "./new-payment-method-form";
-import { togglePaymentMethodStatusAction } from "./actions";
+import { PaymentMethodRow } from "./payment-method-row";
 
 export default async function FormasPagamentoPage() {
   const supabase = createClient();
@@ -39,20 +37,7 @@ export default async function FormasPagamentoPage() {
             </thead>
             <tbody>
               {(methods ?? []).map((m) => (
-                <tr key={m.id} className="border-b border-base-border last:border-0">
-                  <td className="py-2 pr-4 text-ink">{m.name}</td>
-                  <td className="py-2 pr-4">
-                    <StatusBadge status={m.status} />
-                  </td>
-                  {canEdit && (
-                    <td className="py-2 pr-4">
-                      <ToggleStatusButton
-                        isActive={m.status === "ativo"}
-                        action={togglePaymentMethodStatusAction.bind(null, m.id, m.status)}
-                      />
-                    </td>
-                  )}
-                </tr>
+                <PaymentMethodRow key={m.id} method={m} canEdit={canEdit} />
               ))}
               {(methods ?? []).length === 0 && (
                 <tr>

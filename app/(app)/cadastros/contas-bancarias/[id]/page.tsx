@@ -3,6 +3,7 @@ import { hasPermission } from "@/lib/permissions";
 import { Card } from "@/components/ui/card";
 import { BalanceSnapshotForm } from "../balance-snapshot-form";
 import { EditInitialBalanceForm } from "../edit-initial-balance-form";
+import { EditBankAccountForm } from "../edit-bank-account-form";
 import { notFound } from "next/navigation";
 
 function formatCurrency(value: number) {
@@ -27,7 +28,9 @@ export default async function ContaBancariaDetalhePage({ params }: { params: { i
 
   const { data: account } = await supabase
     .from("bank_accounts")
-    .select("id, display_name, bank_name, ownership, initial_balance, initial_balance_date")
+    .select(
+      "id, display_name, bank_name, agency, account_number, bank_code, pix_key, account_type, ownership, holder_name, document_number, initial_balance, initial_balance_date, minimum_balance, consider_in_available_balance, consider_in_business_dashboard, allow_ofx_import"
+    )
     .eq("id", params.id)
     .single();
 
@@ -110,6 +113,13 @@ export default async function ContaBancariaDetalhePage({ params }: { params: { i
           </div>
         </div>
       </Card>
+
+      {canEdit && (
+        <Card>
+          <h2 className="mb-4 text-base font-semibold text-ink">Editar conta</h2>
+          <EditBankAccountForm account={account as any} />
+        </Card>
+      )}
 
       {canEdit && (
         <Card>

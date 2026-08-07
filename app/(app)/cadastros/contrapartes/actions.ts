@@ -72,3 +72,82 @@ export async function toggleCounterpartyStatusAction(id: string, currentStatus: 
   await logAudit({ action: newStatus === "ativo" ? "ativar" : "desativar", entity: "counterparties", entityId: id });
   revalidatePath("/cadastros/contrapartes");
 }
+
+export async function updateCounterpartyAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  try {
+    await requirePermission("editar_contrapartes");
+  } catch {
+    return { error: "Você não tem permissão para editar contrapartes." };
+  }
+
+  const id = formData.get("id") as string;
+  const parsed = counterpartySchema.safeParse({
+    name: formData.get("name"),
+    trade_name: formData.get("trade_name"),
+    document_number: formData.get("document_number"),
+    email: formData.get("email"),
+    phone: formData.get("phone"),
+    address: formData.get("address"),
+    types: formData.getAll("types"),
+    notes: formData.get("notes"),
+  });
+
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
+  }
+
+  const { supabase, userId } = await getOrgIdAndUser();
+  const { data: before } = await supabase
+    .from("counterparties")
+    .select("name, trade_name, document_number, email, phone, address, types, notes")
+    .eq("id", id)
+    .single();
+
+  const newValue = {
+    name: parsed.data.name,
+    trade_name: parsed.data.trade_name || null,
+    document_number: parsed.data.document_number || null,
+    email: parsed.data.email || null,
+    phone: parsed.data.phone || null,
+    address: parsed.data.address || null,
+    types: parsed.data.types,
+    notes: parsed.data.notes || null,
+  };
+
+  const { error } = await supabase
+    .from("counterparties")
+    .update({ ...newValue, updated_by: userId })
+    .eq("id", id);
+
+  if (error) return { error: "Não foi possível atualizar a contraparte." };
+  await logAudit({
+    action: "editar",
+    entity: "counterparties",
+    entityId: id,
+    previousValue: before ?? null,
+    newValue: { nome: newValue.name, tipos: newValue.types },
+  });
+  revalidatePath("/cadastros/contrapartes");
+  return { success: true };
+}
+
+export async function deleteCounterpartyAction(id: string): Promise<{ error?: string }> {
+  try {
+    await requirePermission("editar_contrapartes");
+  } catch {
+    return { error: "Você não tem permissão para excluir contrapartes." };
+  }
+
+  const { supabase } = await getOrgIdAndUser();
+  const { data: item } = await supabase.from("counterparties").select("name").eq("id", id).single();
+  const { error } = await supabase.from("counterparties").delete().eq("id", id);
+
+  if (error) {
+    const { translateDeleteError } = await import("@/lib/cadastros/delete-error");
+    return { error: translateDeleteError(error, item?.name ?? "esta contraparte") };
+  }
+
+  await logAudit({ action: "excluir", entity: "counterparties", entityId: id, metadata: { nome: item?.name } });
+  revalidatePath("/cadastros/contrapartes");
+  return {};
+}

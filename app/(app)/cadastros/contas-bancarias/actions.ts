@@ -202,3 +202,114 @@ export async function updateInitialBalanceAction(_prev: FormState, formData: For
   revalidatePath("/dashboard");
   return { success: true };
 }
+
+// ---------------------------------------------------------------------------
+// Editar os demais dados de uma conta bancária já existente (nome, banco,
+// agência, conta, dados para recibo, titularidade, sinalizadores). O saldo
+// inicial tem sua própria ação acima, por ser um campo sensível à parte.
+// ---------------------------------------------------------------------------
+export async function updateBankAccountAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  try {
+    await requirePermission("alterar_contas_bancarias");
+  } catch {
+    return { error: "Você não tem permissão para alterar contas bancárias." };
+  }
+
+  const id = formData.get("id") as string;
+
+  const parsed = bankAccountSchema.safeParse({
+    display_name: formData.get("display_name"),
+    bank_name: formData.get("bank_name") ?? "",
+    agency: formData.get("agency") ?? "",
+    account_number: formData.get("account_number") ?? "",
+    bank_code: formData.get("bank_code") ?? "",
+    pix_key: formData.get("pix_key") ?? "",
+    account_type: formData.get("account_type"),
+    ownership: formData.get("ownership"),
+    holder_name: formData.get("holder_name") ?? "",
+    document_number: formData.get("document_number") ?? "",
+    // Saldo inicial não é editado por este formulário — reaproveita o
+    // schema mesmo assim, então passamos os valores já salvos como
+    // "placeholder" só para satisfazer a validação; a action não grava
+    // esses dois campos.
+    initial_balance: formData.get("initial_balance") || "0",
+    initial_balance_date: formData.get("initial_balance_date"),
+    minimum_balance: formData.get("minimum_balance") || "",
+    consider_in_available_balance: formData.get("consider_in_available_balance") === "on",
+    consider_in_business_dashboard: formData.get("consider_in_business_dashboard") === "on",
+    allow_ofx_import: formData.get("allow_ofx_import") === "on",
+  });
+
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
+  }
+
+  const { supabase, userId } = await getOrgIdAndUser();
+
+  const { data: before } = await supabase
+    .from("bank_accounts")
+    .select("display_name, bank_name, agency, account_number, bank_code, pix_key, account_type, ownership, holder_name, document_number, minimum_balance, consider_in_available_balance, consider_in_business_dashboard, allow_ofx_import")
+    .eq("id", id)
+    .single();
+
+  const { error } = await supabase
+    .from("bank_accounts")
+    .update({
+      display_name: parsed.data.display_name,
+      bank_name: parsed.data.bank_name || null,
+      agency: parsed.data.agency || null,
+      account_number: parsed.data.account_number || null,
+      bank_code: parsed.data.bank_code || null,
+      pix_key: parsed.data.pix_key || null,
+      account_type: parsed.data.account_type,
+      ownership: parsed.data.ownership,
+      holder_name: parsed.data.holder_name || null,
+      document_number: parsed.data.document_number || null,
+      minimum_balance: parsed.data.minimum_balance || null,
+      consider_in_available_balance: parsed.data.consider_in_available_balance ?? false,
+      consider_in_business_dashboard: parsed.data.consider_in_business_dashboard ?? false,
+      allow_ofx_import: parsed.data.allow_ofx_import ?? false,
+      updated_by: userId,
+    })
+    .eq("id", id);
+
+  if (error) return { error: "Não foi possível atualizar a conta bancária." };
+
+  await logAudit({
+    action: "editar",
+    entity: "bank_accounts",
+    entityId: id,
+    previousValue: before ?? null,
+    newValue: { nome: parsed.data.display_name, titularidade: parsed.data.ownership },
+  });
+
+  revalidatePath(`/cadastros/contas-bancarias/${id}`);
+  revalidatePath("/cadastros/contas-bancarias");
+  return { success: true };
+}
+
+export async function deleteBankAccountAction(id: string): Promise<{ error?: string }> {
+  try {
+    await requirePermission("alterar_contas_bancarias");
+  } catch {
+    return { error: "Você não tem permissão para excluir contas bancárias." };
+  }
+
+  const { supabase } = await getOrgIdAndUser();
+  const { data: item } = await supabase.from("bank_accounts").select("display_name").eq("id", id).single();
+  const { error } = await supabase.from("bank_accounts").delete().eq("id", id);
+
+  if (error) {
+    const { translateDeleteError } = await import("@/lib/cadastros/delete-error");
+    return {
+      error:
+        error.code === "23503"
+          ? `Não é possível excluir "${item?.display_name ?? "esta conta"}" — ela tem lançamentos, liquidações, transferências ou conciliações vinculadas. Desative-a em vez de excluir, para preservar o histórico.`
+          : translateDeleteError(error, item?.display_name ?? "esta conta"),
+    };
+  }
+
+  await logAudit({ action: "excluir", entity: "bank_accounts", entityId: id, metadata: { nome: item?.display_name } });
+  revalidatePath("/cadastros/contas-bancarias");
+  return {};
+}

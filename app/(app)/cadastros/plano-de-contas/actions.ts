@@ -175,3 +175,215 @@ export async function toggleSubcategoryStatusAction(id: string, currentStatus: s
   await logAudit({ action: newStatus === "ativo" ? "ativar" : "desativar", entity: "chart_account_subcategories", entityId: id });
   revalidatePath("/cadastros/plano-de-contas");
 }
+
+// ---------------------------------------------------------------------------
+// Editar / excluir família
+// ---------------------------------------------------------------------------
+export async function updateFamilyAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  try {
+    await requirePermission("alterar_plano_de_contas");
+  } catch {
+    return { error: "Você não tem permissão para alterar o plano de contas." };
+  }
+
+  const id = formData.get("id") as string;
+  const parsed = chartFamilySchema.safeParse({
+    name: formData.get("name"),
+    code: formData.get("code"),
+    type: formData.get("type"),
+  });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
+  }
+
+  const { supabase, userId } = await getOrgIdAndUser();
+  const { data: before } = await supabase.from("chart_account_families").select("name, code, type").eq("id", id).single();
+  const { error } = await supabase
+    .from("chart_account_families")
+    .update({ name: parsed.data.name, code: parsed.data.code || null, type: parsed.data.type, updated_by: userId })
+    .eq("id", id);
+
+  if (error) return { error: "Não foi possível atualizar a família." };
+  await logAudit({
+    action: "editar",
+    entity: "chart_account_families",
+    entityId: id,
+    previousValue: before ?? null,
+    newValue: { nome: parsed.data.name, tipo: parsed.data.type },
+  });
+  revalidatePath("/cadastros/plano-de-contas");
+  return { success: true };
+}
+
+export async function deleteFamilyAction(id: string): Promise<{ error?: string }> {
+  try {
+    await requirePermission("alterar_plano_de_contas");
+  } catch {
+    return { error: "Você não tem permissão para excluir do plano de contas." };
+  }
+
+  const { supabase } = await getOrgIdAndUser();
+  const { data: item } = await supabase.from("chart_account_families").select("name").eq("id", id).single();
+  const { error } = await supabase.from("chart_account_families").delete().eq("id", id);
+
+  if (error) {
+    const { translateDeleteError } = await import("@/lib/cadastros/delete-error");
+    // Famílias também são bloqueadas se tiverem categorias abaixo (mesmo que
+    // as categorias em si não estejam em uso) — a mensagem cobre os dois casos.
+    return {
+      error:
+        error.code === "23503"
+          ? `Não é possível excluir "${item?.name ?? "esta família"}" — existem categorias cadastradas nela, ou ela está em uso. Desative-a em vez de excluir, ou exclua/mova as categorias primeiro.`
+          : translateDeleteError(error, item?.name ?? "esta família"),
+    };
+  }
+
+  await logAudit({ action: "excluir", entity: "chart_account_families", entityId: id, metadata: { nome: item?.name } });
+  revalidatePath("/cadastros/plano-de-contas");
+  return {};
+}
+
+// ---------------------------------------------------------------------------
+// Editar / excluir categoria
+// ---------------------------------------------------------------------------
+export async function updateCategoryAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  try {
+    await requirePermission("alterar_plano_de_contas");
+  } catch {
+    return { error: "Você não tem permissão para alterar o plano de contas." };
+  }
+
+  const id = formData.get("id") as string;
+  const parsed = chartCategorySchema.safeParse({
+    family_id: formData.get("family_id"),
+    name: formData.get("name"),
+    code: formData.get("code"),
+    managerial_nature: formData.get("managerial_nature"),
+    dre_behavior: formData.get("dre_behavior"),
+    cashflow_behavior: formData.get("cashflow_behavior"),
+  });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
+  }
+
+  const { supabase, userId } = await getOrgIdAndUser();
+  const { data: before } = await supabase
+    .from("chart_account_categories")
+    .select("name, family_id, managerial_nature, dre_behavior, cashflow_behavior")
+    .eq("id", id)
+    .single();
+
+  const { error } = await supabase
+    .from("chart_account_categories")
+    .update({
+      family_id: parsed.data.family_id,
+      name: parsed.data.name,
+      code: parsed.data.code || null,
+      managerial_nature: parsed.data.managerial_nature,
+      dre_behavior: parsed.data.dre_behavior,
+      cashflow_behavior: parsed.data.cashflow_behavior,
+      updated_by: userId,
+    })
+    .eq("id", id);
+
+  if (error) return { error: "Não foi possível atualizar a categoria." };
+  await logAudit({
+    action: "editar",
+    entity: "chart_account_categories",
+    entityId: id,
+    previousValue: before ?? null,
+    newValue: { nome: parsed.data.name, comportamentoDre: parsed.data.dre_behavior },
+  });
+  revalidatePath("/cadastros/plano-de-contas");
+  return { success: true };
+}
+
+export async function deleteCategoryAction(id: string): Promise<{ error?: string }> {
+  try {
+    await requirePermission("alterar_plano_de_contas");
+  } catch {
+    return { error: "Você não tem permissão para excluir do plano de contas." };
+  }
+
+  const { supabase } = await getOrgIdAndUser();
+  const { data: item } = await supabase.from("chart_account_categories").select("name").eq("id", id).single();
+  const { error } = await supabase.from("chart_account_categories").delete().eq("id", id);
+
+  if (error) {
+    const { translateDeleteError } = await import("@/lib/cadastros/delete-error");
+    return {
+      error:
+        error.code === "23503"
+          ? `Não é possível excluir "${item?.name ?? "esta categoria"}" — ela está em uso em lançamentos ou tem subcategorias cadastradas. Desative-a em vez de excluir.`
+          : translateDeleteError(error, item?.name ?? "esta categoria"),
+    };
+  }
+
+  await logAudit({ action: "excluir", entity: "chart_account_categories", entityId: id, metadata: { nome: item?.name } });
+  revalidatePath("/cadastros/plano-de-contas");
+  return {};
+}
+
+// ---------------------------------------------------------------------------
+// Editar / excluir subcategoria
+// ---------------------------------------------------------------------------
+export async function updateSubcategoryAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  try {
+    await requirePermission("alterar_plano_de_contas");
+  } catch {
+    return { error: "Você não tem permissão para alterar o plano de contas." };
+  }
+
+  const id = formData.get("id") as string;
+  const parsed = chartSubcategorySchema.safeParse({
+    category_id: formData.get("category_id"),
+    name: formData.get("name"),
+    code: formData.get("code"),
+  });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
+  }
+
+  const { supabase, userId } = await getOrgIdAndUser();
+  const { data: before } = await supabase
+    .from("chart_account_subcategories")
+    .select("name, category_id")
+    .eq("id", id)
+    .single();
+  const { error } = await supabase
+    .from("chart_account_subcategories")
+    .update({ category_id: parsed.data.category_id, name: parsed.data.name, code: parsed.data.code || null, updated_by: userId })
+    .eq("id", id);
+
+  if (error) return { error: "Não foi possível atualizar a subcategoria." };
+  await logAudit({
+    action: "editar",
+    entity: "chart_account_subcategories",
+    entityId: id,
+    previousValue: before ?? null,
+    newValue: { nome: parsed.data.name },
+  });
+  revalidatePath("/cadastros/plano-de-contas");
+  return { success: true };
+}
+
+export async function deleteSubcategoryAction(id: string): Promise<{ error?: string }> {
+  try {
+    await requirePermission("alterar_plano_de_contas");
+  } catch {
+    return { error: "Você não tem permissão para excluir do plano de contas." };
+  }
+
+  const { supabase } = await getOrgIdAndUser();
+  const { data: item } = await supabase.from("chart_account_subcategories").select("name").eq("id", id).single();
+  const { error } = await supabase.from("chart_account_subcategories").delete().eq("id", id);
+
+  if (error) {
+    const { translateDeleteError } = await import("@/lib/cadastros/delete-error");
+    return { error: translateDeleteError(error, item?.name ?? "esta subcategoria") };
+  }
+
+  await logAudit({ action: "excluir", entity: "chart_account_subcategories", entityId: id, metadata: { nome: item?.name } });
+  revalidatePath("/cadastros/plano-de-contas");
+  return {};
+}

@@ -1,11 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
 import { hasPermission } from "@/lib/permissions";
 import { Card } from "@/components/ui/card";
-import { StatusBadge } from "@/components/ui/status-badge";
-import { ToggleStatusButton } from "@/components/ui/toggle-status-button";
 import { NewCounterpartyForm } from "./new-counterparty-form";
-import { toggleCounterpartyStatusAction } from "./actions";
-import { COUNTERPARTY_TYPE_LABELS } from "@/lib/labels/contrapartes";
+import { CounterpartyRow } from "./counterparty-row";
 
 export default async function ContrapartesPage() {
   const supabase = createClient();
@@ -14,7 +11,7 @@ export default async function ContrapartesPage() {
 
   const { data: counterparties } = await supabase
     .from("counterparties")
-    .select("id, name, trade_name, document_number, email, types, status")
+    .select("id, name, trade_name, document_number, email, phone, address, types, notes, status")
     .order("name");
 
   return (
@@ -47,25 +44,7 @@ export default async function ContrapartesPage() {
             </thead>
             <tbody>
               {(counterparties ?? []).map((c) => (
-                <tr key={c.id} className="border-b border-base-border last:border-0">
-                  <td className="py-2 pr-4 text-ink">{c.name}</td>
-                  <td className="py-2 pr-4 text-ink-soft">{c.document_number ?? "—"}</td>
-                  <td className="py-2 pr-4 text-ink-soft">
-                    {(c.types ?? []).map((t: string) => COUNTERPARTY_TYPE_LABELS[t]).join(", ") || "—"}
-                  </td>
-                  <td className="py-2 pr-4 text-ink-soft">{c.email ?? "—"}</td>
-                  <td className="py-2 pr-4">
-                    <StatusBadge status={c.status} />
-                  </td>
-                  {canEdit && (
-                    <td className="py-2 pr-4">
-                      <ToggleStatusButton
-                        isActive={c.status === "ativo"}
-                        action={toggleCounterpartyStatusAction.bind(null, c.id, c.status)}
-                      />
-                    </td>
-                  )}
-                </tr>
+                <CounterpartyRow key={c.id} counterparty={c as any} canEdit={canEdit} />
               ))}
               {(counterparties ?? []).length === 0 && (
                 <tr>

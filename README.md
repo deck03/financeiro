@@ -2115,3 +2115,59 @@ e a função `delete_pending_bank_transactions()`.
    desta conta" e confirme.
 3. Reimporte o arquivo `.ofx` com as 236 transações — a contagem deve bater certinho desta vez.
 
+---
+
+# Melhoria — editar e excluir cadastros
+
+## O que foi pedido
+
+Editar e excluir qualquer cadastro do sistema: plano de contas, centros de custo, contas
+bancárias, contrapartes e formas de pagamento. Antes, só era possível criar e ativar/desativar
+— não havia como corrigir um cadastro depois de criado, nem removê-lo de verdade.
+
+## Como funciona
+
+Cada cadastro agora tem, junto ao botão de ativar/desativar:
+
+- **Editar** — abre os campos para alterar diretamente, sem precisar recriar o registro.
+- **Excluir** — remove o cadastro de verdade, com confirmação.
+
+### A regra por trás do "excluir"
+
+Excluir só é permitido quando o cadastro **nunca foi usado** em nenhum lançamento, recibo,
+liquidação, transferência ou recorrência. Essa proteção já existia no desenho do banco de dados
+desde a Fase 2 (nenhuma dessas ligações tem exclusão em cascata) — o Postgres recusa sozinho a
+exclusão de algo que está em uso. A novidade aqui é só a experiência: em vez de um erro técnico,
+o sistema mostra uma mensagem clara — *"Não é possível excluir 'X' — está em uso. Desative em
+vez de excluir, para preservar o histórico."*
+
+Ou seja:
+
+- Um cadastro **nunca usado** (ex.: uma categoria criada por engano, nunca usada em nenhuma
+  conta) → exclui de verdade, sem deixar vestígio.
+- Um cadastro **já usado em algo** → o sistema recusa a exclusão e sugere desativar, porque
+  excluir de verdade quebraria o histórico de tudo que referencia aquele cadastro.
+
+Isso vale para os cinco tipos de cadastro:
+
+- **Plano de contas** — famílias, categorias e subcategorias, cada uma com seus próprios campos
+  editáveis (natureza gerencial, comportamento na DRE, no fluxo de caixa etc.).
+- **Centros de custo** — nome e código.
+- **Formas de pagamento** — nome.
+- **Contrapartes** — todos os campos (nome, nome fantasia, documento, e-mail, telefone,
+  endereço, tipos, observações).
+- **Contas bancárias** — todos os campos (nome, banco, agência, conta, código do banco, chave
+  Pix, titularidade, tipo, titular, saldo mínimo, sinalizadores). O saldo inicial continua tendo
+  seu próprio formulário de edição (Fase 12, ajuste anterior), por ser um campo mais sensível.
+
+## Migration
+
+`supabase/migrations/0018_editar_excluir_cadastros.sql` — a maioria das tabelas já permitia
+edição via política de RLS existente (não precisou de mudança); só contrapartes precisou de uma
+política de exclusão nova (reaproveitando a permissão já existente `editar_contrapartes`).
+
+## Testes
+
+3 testes novos em `tests/fase12-editar-excluir-cadastros.test.ts`, cobrindo a tradução da
+mensagem de erro. Total do projeto: 162 testes, todos passando.
+

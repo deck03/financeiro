@@ -316,7 +316,10 @@ Base para os lançamentos:
 - **Formas de pagamento** — Pix, boleto, cartão, transferência etc.
 
 Todo cadastro pode ser **ativado/desativado** em vez de excluído — histórico é sempre
-preservado.
+preservado. Cada um também pode ser **editado** (clique em "Editar" na linha correspondente) ou
+**excluído de verdade**, mas só se nunca tiver sido usado em nenhum lançamento, recibo ou
+transferência — se já foi usado, o sistema explica isso e sugere desativar em vez de excluir,
+para não quebrar o histórico de nada que já referencia aquele cadastro.
 
 ## 17. Perguntas frequentes
 

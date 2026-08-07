@@ -55,3 +55,56 @@ export async function togglePaymentMethodStatusAction(id: string, currentStatus:
   await logAudit({ action: newStatus === "ativo" ? "ativar" : "desativar", entity: "payment_methods", entityId: id });
   revalidatePath("/cadastros/formas-pagamento");
 }
+
+export async function updatePaymentMethodAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  try {
+    await requirePermission("alterar_formas_pagamento");
+  } catch {
+    return { error: "Você não tem permissão para alterar formas de pagamento." };
+  }
+
+  const id = formData.get("id") as string;
+  const parsed = paymentMethodSchema.safeParse({ name: formData.get("name") });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
+  }
+
+  const { supabase, userId } = await getOrgIdAndUser();
+  const { data: before } = await supabase.from("payment_methods").select("name").eq("id", id).single();
+  const { error } = await supabase
+    .from("payment_methods")
+    .update({ name: parsed.data.name, updated_by: userId })
+    .eq("id", id);
+
+  if (error) return { error: "Não foi possível atualizar a forma de pagamento." };
+  await logAudit({
+    action: "editar",
+    entity: "payment_methods",
+    entityId: id,
+    previousValue: before ?? null,
+    newValue: { name: parsed.data.name },
+  });
+  revalidatePath("/cadastros/formas-pagamento");
+  return { success: true };
+}
+
+export async function deletePaymentMethodAction(id: string): Promise<{ error?: string }> {
+  try {
+    await requirePermission("alterar_formas_pagamento");
+  } catch {
+    return { error: "Você não tem permissão para excluir formas de pagamento." };
+  }
+
+  const { supabase } = await getOrgIdAndUser();
+  const { data: item } = await supabase.from("payment_methods").select("name").eq("id", id).single();
+  const { error } = await supabase.from("payment_methods").delete().eq("id", id);
+
+  if (error) {
+    const { translateDeleteError } = await import("@/lib/cadastros/delete-error");
+    return { error: translateDeleteError(error, item?.name ?? "esta forma de pagamento") };
+  }
+
+  await logAudit({ action: "excluir", entity: "payment_methods", entityId: id, metadata: { nome: item?.name } });
+  revalidatePath("/cadastros/formas-pagamento");
+  return {};
+}
