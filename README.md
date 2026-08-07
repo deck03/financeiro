@@ -2077,3 +2077,41 @@ importação OFX). Não roda nenhuma exclusão automática desta vez.
 3. Confira a lista de "Não conciliadas" — os valores repetidos que você notou devem voltar a
    aparecer como transações separadas.
 
+---
+
+# Melhoria — excluir transações pendentes de conciliação
+
+## O que foi pedido
+
+Depois dos problemas de duplicidade/exclusão acima, a contagem de transações pendentes ficou
+inconsistente com o arquivo original (240 no sistema, 236 no arquivo) — sobra de tentativas de
+importação anteriores. Não havia como limpar isso pela interface.
+
+## O que foi feito
+
+- **Excluir uma transação pendente específica** — um link "Excluir" em cada transação ainda não
+  conciliada, com confirmação.
+- **Excluir todas as pendentes de uma conta** — botão no topo da lista "Não conciliadas", com
+  uma confirmação explícita explicando o que vai acontecer antes de executar.
+
+Em ambos os casos, a exclusão só é permitida para transações **ainda não conciliadas** — nunca
+para uma transação já vinculada a um lançamento ou marcada como ignorada. Essa proteção existe
+em dois níveis: na política de segurança do banco de dados (RLS) e na função que executa a
+exclusão — mesmo que a interface tivesse algum bug, o banco recusaria a tentativa.
+
+Como uma transação pendente nunca virou lançamento, excluí-la **nunca afeta nenhum dado
+financeiro real** — só remove a cópia do extrato dentro do sistema. Depois de limpar, é só
+reimportar o arquivo `.ofx` correto.
+
+## Migration
+
+`supabase/migrations/0017_excluir_pendentes_conciliacao.sql` — adiciona a política de exclusão
+e a função `delete_pending_bank_transactions()`.
+
+## Como usar no seu caso
+
+1. Aplique esta migration.
+2. Na tela de Conciliação, com a conta certa selecionada, clique em "Excluir todas as pendentes
+   desta conta" e confirme.
+3. Reimporte o arquivo `.ofx` com as 236 transações — a contagem deve bater certinho desta vez.
+

@@ -1421,6 +1421,10 @@ export type Database = {
         Args: { p_bank_transaction_id: string };
         Returns: undefined;
       };
+      delete_pending_bank_transactions: {
+        Args: { p_bank_account_id: string };
+        Returns: number;
+      };
       ignore_bank_transaction: {
         Args: { p_bank_transaction_id: string };
         Returns: undefined;

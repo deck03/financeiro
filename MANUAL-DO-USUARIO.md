@@ -182,6 +182,12 @@ quais categorias mais pesaram na diferença.
      data de competência já vem preenchida com a data da transação; mude-a se a competência for
      de outro mês (ex.: uma conta paga em atraso).
    - **Ignorar** — quando não é algo que deva virar um lançamento (pode reverter depois).
+
+Se a contagem de transações pendentes não bater com o arquivo original (por exemplo, depois de
+uma importação de teste ou um problema pontual), use **"Excluir"** em uma transação específica,
+ou **"Excluir todas as pendentes desta conta"** no topo da lista, para limpar e reimportar o
+arquivo certo. Isso nunca afeta lançamentos já criados — só remove a cópia do extrato ainda não
+conciliada dentro do sistema.
 5. É possível **desfazer** uma conciliação já feita, se tiver sido um engano.
 
 ## 10. Recibos de aluguel

@@ -132,3 +132,59 @@ export async function undoReconciliationAction(bankTransactionId: string) {
   await logAudit({ action: "desfazer_conciliacao", entity: "bank_transactions", entityId: bankTransactionId });
   revalidatePath("/conciliacao");
 }
+
+// ---------------------------------------------------------------------------
+// Excluir transações bancárias pendentes (ainda não conciliadas).
+//
+// Útil para corrigir situações como uma contagem que não bate com o arquivo
+// original (ex.: sobras de um teste de importação anterior). Como uma
+// transação "não conciliada" nunca virou lançamento, excluir não afeta
+// nenhum dado financeiro real — só remove a cópia do extrato dentro do
+// sistema. A proteção contra excluir algo já conciliado/ignorado está tanto
+// na política de RLS quanto na função do banco (defesa em profundidade).
+// ---------------------------------------------------------------------------
+export async function deletePendingTransactionsAction(
+  bankAccountId: string
+): Promise<{ error?: string; deletedCount?: number }> {
+  try {
+    await requirePermission("importar_ofx");
+  } catch {
+    return { error: "Você não tem permissão para excluir transações importadas." };
+  }
+
+  const supabase = createClient();
+  const { data, error } = await supabase.rpc("delete_pending_bank_transactions", {
+    p_bank_account_id: bankAccountId,
+  });
+
+  if (error) {
+    return { error: "Não foi possível excluir as transações pendentes." };
+  }
+
+  revalidatePath("/conciliacao");
+  return { deletedCount: data ?? 0 };
+}
+
+/** Exclui uma única transação pendente (ex.: uma linha claramente errada, sem precisar limpar tudo). */
+export async function deleteSinglePendingTransactionAction(bankTransactionId: string): Promise<{ error?: string }> {
+  try {
+    await requirePermission("importar_ofx");
+  } catch {
+    return { error: "Você não tem permissão para excluir transações importadas." };
+  }
+
+  const supabase = createClient();
+  const { error } = await supabase
+    .from("bank_transactions")
+    .delete()
+    .eq("id", bankTransactionId)
+    .eq("status", "nao_conciliada");
+
+  if (error) {
+    return { error: "Não foi possível excluir esta transação." };
+  }
+
+  await logAudit({ action: "excluir_pendentes", entity: "bank_transactions", entityId: bankTransactionId });
+  revalidatePath("/conciliacao");
+  return {};
+}

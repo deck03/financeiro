@@ -4,6 +4,8 @@ import { Card } from "@/components/ui/card";
 import Link from "next/link";
 import { ReconciliationPanel } from "./reconciliation-panel";
 import { UndoReconciliationButton, UnignoreButton } from "./reconciliation-buttons";
+import { DeletePendingButton } from "./delete-pending-button";
+import { DeleteSinglePendingButton } from "./delete-single-pending-button";
 import { computeRemainingBalance } from "@/lib/finance/remaining";
 import { buildReconciliationSuggestionIndex, suggestionKey } from "@/lib/conciliacao/suggestions";
 
@@ -161,7 +163,10 @@ export default async function ConciliacaoPage({
       </Card>
 
       <Card>
-        <h2 className="mb-4 text-base font-semibold text-ink">Não conciliadas ({(pending ?? []).length})</h2>
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-base font-semibold text-ink">Não conciliadas ({(pending ?? []).length})</h2>
+          <DeletePendingButton bankAccountId={accountId} count={(pending ?? []).length} />
+        </div>
         {(pending ?? []).length === 0 ? (
           <p className="text-sm text-ink-faint">Nenhuma transação pendente de conciliação.</p>
         ) : (
@@ -177,6 +182,11 @@ export default async function ConciliacaoPage({
                     {formatCurrency(t.amount)}
                   </p>
                 </div>
+                {canReconcile && (
+                  <div className="mt-1 flex justify-end">
+                    <DeleteSinglePendingButton bankTransactionId={t.id} />
+                  </div>
+                )}
                 {canReconcile && (
                   <div className="mt-3">
                     <ReconciliationPanel
