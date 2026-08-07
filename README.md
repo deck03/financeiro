@@ -1982,3 +1982,49 @@ silenciosamente ausentes da DRE por competência.
 2 testes novos, na sequência de `tests/fase12-fix-conciliacao-invalid-input.test.ts`. Total do
 projeto: 159 testes, todos passando.
 
+---
+
+# Correção — transações "não conciliadas" duplicando entre importações OFX
+
+## O problema
+
+Ao importar um segundo arquivo OFX com período sobreposto ao de uma importação anterior (com
+transações ainda não conciliadas), as transações antigas apareciam duplicadas em vez de serem
+reconhecidas como já existentes.
+
+## Causa raiz
+
+A checagem de duplicidade combinava dois critérios — identificador único do banco (FITID) e,
+como alternativa, a combinação conta + data + valor + descrição (hash) — mas só usava o hash
+**quando a transação não tinha FITID**. Quando tinha FITID, só o FITID era checado.
+
+Alguns bancos (aparentemente incluindo o C6, no caso do DECK 03) não geram um FITID estável
+entre exportações — a mesma transação real recebe um identificador diferente a cada arquivo
+baixado. Nesse caso, o sistema via "um FITID que nunca vi" e importava de novo, mesmo sendo, na
+prática, a mesma transação.
+
+## Correção
+
+- **Preview e confirmação agora checam os dois critérios sempre**, com ou sem FITID: uma
+  transação só é considerada nova se nem o FITID nem o hash já existirem para aquela conta.
+- Isso significa que mesmo quando o FITID muda entre exportações, a mesma transação real
+  continua sendo reconhecida como já importada, pela combinação data + valor + descrição.
+- **Limpeza retroativa**: a migration remove as duplicatas já criadas por esse motivo — mas
+  **só entre transações ainda não conciliadas** (nunca vinculadas a um lançamento). Nada que já
+  foi conciliado é tocado, para não colocar em risco um lançamento real já criado.
+
+## Migration
+
+`supabase/migrations/0016_corrige_duplicatas_ofx.sql`.
+
+## Testes
+
+3 testes novos em `tests/fase12-fix-ofx-duplicidade.test.ts`, simulando o cenário exato (mesma
+transação real, FITID diferente entre duas exportações, hash igual). Total do projeto: 162
+testes, todos passando.
+
+## Se você já tem transações duplicadas na tela de Conciliação
+
+Depois de aplicar esta migration, as duplicatas entre as transações ainda não conciliadas são
+removidas automaticamente — não precisa fazer nada manualmente na interface.
+

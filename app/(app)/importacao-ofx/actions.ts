@@ -54,7 +54,13 @@ export async function previewOfxImportAction(bankAccountId: string, transactions
   }));
 
   const fitids = withHashes.filter((t) => t.fitid).map((t) => t.fitid as string);
-  const hashes = withHashes.filter((t) => !t.fitid).map((t) => t.hash);
+  // O hash é checado para TODAS as transações, com ou sem FITID — alguns
+  // bancos não geram um FITID estável entre exportações (a mesma transação
+  // real ganha um FITID diferente a cada arquivo baixado). Checar só por
+  // FITID nesse caso deixaria a transação passar como "nova" de novo,
+  // duplicando. O hash (conta + data + valor + descrição) funciona como
+  // uma segunda checagem, independente do FITID.
+  const hashes = withHashes.map((t) => t.hash);
 
   const existingFitids = new Set<string>();
   const existingHashes = new Set<string>();
@@ -79,7 +85,7 @@ export async function previewOfxImportAction(bankAccountId: string, transactions
 
   const result: PreviewedTransaction[] = withHashes.map((t) => ({
     ...t,
-    isDuplicate: t.fitid ? existingFitids.has(t.fitid) : existingHashes.has(t.hash),
+    isDuplicate: (!!t.fitid && existingFitids.has(t.fitid)) || existingHashes.has(t.hash),
   }));
 
   return { transactions: result };
@@ -152,15 +158,39 @@ export async function confirmOfxImportAction(
   const withoutFitid = withHashes.filter((t) => !t.ofx_transaction_id);
 
   let importedCount = 0;
+  let skippedByHashCount = 0;
   const insertErrors: string[] = [];
 
   if (withFitid.length > 0) {
-    const { data, error } = await supabase
+    // Proteção extra antes de inserir: alguns bancos não geram um FITID
+    // estável entre exportações (a mesma transação real recebe um FITID
+    // diferente em cada arquivo baixado). O índice único do banco só
+    // protege por FITID nesse lote — sozinho, ele deixaria passar uma
+    // transação "nova" que na verdade é a mesma de antes, com outro FITID.
+    // Por isso, checamos o hash (conta + data + valor + descrição) aqui
+    // também, e tiramos do lote qualquer uma que já exista por esse
+    // critério, mesmo tendo um FITID que nunca apareceu antes.
+    const { data: existingByHash } = await supabase
       .from("bank_transactions")
-      .upsert(withFitid, { onConflict: "bank_account_id,ofx_transaction_id", ignoreDuplicates: true })
-      .select("id");
-    if (error) insertErrors.push(error.message);
-    else importedCount += data?.length ?? 0;
+      .select("transaction_hash")
+      .eq("bank_account_id", bankAccountId)
+      .in(
+        "transaction_hash",
+        withFitid.map((t) => t.transaction_hash)
+      );
+    const existingHashSet = new Set((existingByHash ?? []).map((r) => r.transaction_hash));
+
+    const trulyNewWithFitid = withFitid.filter((t) => !existingHashSet.has(t.transaction_hash));
+    skippedByHashCount += withFitid.length - trulyNewWithFitid.length;
+
+    if (trulyNewWithFitid.length > 0) {
+      const { data, error } = await supabase
+        .from("bank_transactions")
+        .upsert(trulyNewWithFitid, { onConflict: "bank_account_id,ofx_transaction_id", ignoreDuplicates: true })
+        .select("id");
+      if (error) insertErrors.push(error.message);
+      else importedCount += data?.length ?? 0;
+    }
   }
 
   if (withoutFitid.length > 0) {
