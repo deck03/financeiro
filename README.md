@@ -2028,3 +2028,52 @@ testes, todos passando.
 Depois de aplicar esta migration, as duplicatas entre as transações ainda não conciliadas são
 removidas automaticamente — não precisa fazer nada manualmente na interface.
 
+---
+
+# ⚠️ Correção revertida — a migration 0016 apagou transações que não eram duplicatas
+
+## O que aconteceu
+
+A correção acima (checar duplicidade por hash mesmo quando havia FITID) partiu de uma suposição
+que não se confirmou: que o banco (C6) gerava um identificador instável entre exportações. Na
+prática, isso teve um efeito colateral sério — **duas transações genuinamente diferentes, no
+mesmo dia, com o mesmo valor** (comum no DECK 03: vários locatários pagando o mesmo valor de
+aluguel, por exemplo, ou repasses idênticos de agregadores) passaram a ser tratadas como se
+fossem a mesma transação. A migration `0016_corrige_duplicatas_ofx.sql` **apagou** algumas
+dessas transações legítimas, mantendo só uma de cada grupo com valor/data/descrição parecidos.
+
+## Por que isso não é tão grave quanto parece
+
+As transações apagadas eram todas **ainda não conciliadas** — ou seja, nunca tinham sido
+vinculadas a nenhuma conta a pagar/receber. Nenhum lançamento financeiro real foi afetado; só a
+"cópia" do extrato bancário dentro do sistema. Isso significa que dá para recuperar sem nenhuma
+manipulação manual de dados: **basta reimportar o mesmo arquivo `.ofx` (ou um que cubra o mesmo
+período) depois de aplicar a correção abaixo.**
+
+## Correção
+
+A checagem por hash (conta + data + valor + descrição) voltou a valer **só quando não há
+FITID** — exatamente como era antes da migration 0016. O FITID do banco, quando presente, volta
+a ser a fonte da verdade: duas transações com FITIDs diferentes nunca são tratadas como
+duplicata uma da outra, mesmo com valor e data iguais.
+
+Isso significa que o problema original relatado ("não conciliadas duplicaram") pode voltar a
+acontecer em algum caso específico — mas o custo de errar nessa direção (raramente deixar passar
+uma duplicata de verdade, corrigível manualmente com "Ignorar") é muito menor do que errar na
+outra (apagar ou nunca importar transações que são, na verdade, diferentes). Se a duplicação
+genuína voltar a acontecer, é preciso investigar com mais cuidado antes de tentar de novo — não
+vou aplicar uma heurística automática sem confirmar a causa com mais certeza.
+
+**Nenhuma migration nova nesta correção** — a mudança é só de código (as duas actions de
+importação OFX). Não roda nenhuma exclusão automática desta vez.
+
+## O que fazer agora
+
+1. Aplique esta correção (substitua os arquivos e faça o deploy).
+2. Reimporte o(s) arquivo(s) `.ofx` que cobrem o período em que você notou o problema — as
+   transações que sobraram (com FITID ainda presente no banco) são reconhecidas como já
+   importadas e não duplicam; as que foram apagadas por engano (FITID que não está mais no
+   banco) voltam a aparecer normalmente, como transações novas de verdade.
+3. Confira a lista de "Não conciliadas" — os valores repetidos que você notou devem voltar a
+   aparecer como transações separadas.
+
