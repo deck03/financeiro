@@ -4,6 +4,12 @@ export const FAMILY_TYPE_LABELS: Record<string, string> = {
   transferencia: "Transferência",
 };
 
+export const CATEGORY_TYPE_LABELS: Record<string, string> = {
+  despesa: "Despesa",
+  receita: "Receita",
+  ambos: "Despesa e receita",
+};
+
 export const MANAGERIAL_NATURE_LABELS: Record<string, string> = {
   operacional: "Operacional",
   financeira: "Financeira",
