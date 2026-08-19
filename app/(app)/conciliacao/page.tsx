@@ -87,7 +87,7 @@ export default async function ConciliacaoPage({
       .eq("type", "receita")
       .in("status", ["em_aberto", "agendado", "parcialmente_recebido"])
       .order("due_date"),
-    supabase.from("chart_account_categories").select("id, name").eq("status", "ativo").order("name"),
+    supabase.from("chart_account_categories").select("id, name, type").eq("status", "ativo").order("name"),
     supabase.from("cost_centers").select("id, name").eq("status", "ativo").order("name"),
     supabase.from("counterparties").select("id, name").eq("status", "ativo").order("name"),
     supabase.from("payment_methods").select("id, name").eq("status", "ativo").order("name"),
