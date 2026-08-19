@@ -29,6 +29,7 @@ function SubmitButton({ label }: { label: string }) {
 
 type OpenEntry = { id: string; description: string; remaining: number; due_date: string };
 type Option = { id: string; name: string };
+type CategoryOption = Option & { type: string };
 type Suggestion = {
   categoryId: string | null;
   subcategoryId: string | null;
@@ -56,7 +57,7 @@ export function ReconciliationPanel({
   description: string;
   transactionDate: string;
   openEntries: OpenEntry[];
-  categories: Option[];
+  categories: CategoryOption[];
   subcategories: (Option & { category_id: string })[];
   costCenters: Option[];
   counterparties: Option[];
@@ -137,6 +138,11 @@ export function ReconciliationPanel({
   }
 
   const filteredSubcategories = subcategories.filter((s) => s.category_id === selectedCategory);
+  // Mesma regra usada no resto do sistema: valor negativo = despesa, valor
+  // positivo = receita. Categorias marcadas como "ambos" aparecem nos dois
+  // casos; as demais só aparecem para o tipo correspondente.
+  const relevantType = amount >= 0 ? "receita" : "despesa";
+  const filteredCategories = categories.filter((c) => c.type === relevantType || c.type === "ambos");
 
   return (
     <form action={newAction} className="space-y-2 rounded-card border border-base-border bg-base-bg p-3">
@@ -177,7 +183,7 @@ export function ReconciliationPanel({
             <option value="" disabled>
               Selecione
             </option>
-            {categories.map((c) => (
+            {filteredCategories.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
               </option>
