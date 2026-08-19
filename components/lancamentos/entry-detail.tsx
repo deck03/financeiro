@@ -6,6 +6,7 @@ import { SettleForm } from "./settle-form";
 import { CancelForm } from "./cancel-form";
 import { AttachmentsPanel } from "./attachments-panel";
 import { ReverseSettlementButton } from "./reverse-settlement-button";
+import { EntryDetailFields } from "./entry-detail-fields";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 
@@ -19,15 +20,6 @@ function formatDate(value: string | null) {
   return `${day}/${month}/${year}`;
 }
 
-function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
-  return (
-    <div>
-      <p className="text-xs font-medium uppercase tracking-wide text-ink-faint">{label}</p>
-      <p className="mt-0.5 text-sm text-ink">{value ?? "—"}</p>
-    </div>
-  );
-}
-
 const SETTLED_STATUSES = ["em_aberto", "agendado", "parcialmente_pago", "parcialmente_recebido"];
 
 export async function EntryDetail({ entryId, type }: { entryId: string; type: "receita" | "despesa" }) {
@@ -39,7 +31,7 @@ export async function EntryDetail({ entryId, type }: { entryId: string; type: "r
     .select(
       `id, description, original_amount, due_date, issue_date, competence_date, document_number,
        notes, status, type, organization_id, installment_group_id, installment_number, installment_total,
-       recurring_rule_id,
+       recurring_rule_id, counterparty_id, category_id, subcategory_id, cost_center_id, bank_account_id, payment_method_id,
        counterparties(name), chart_account_categories(name), chart_account_subcategories(name),
        cost_centers(name), bank_accounts(display_name), payment_methods(name),
        installment_groups(description, installments_count),
@@ -91,9 +83,25 @@ export async function EntryDetail({ entryId, type }: { entryId: string; type: "r
       : await hasPermission("recebimentos_parciais");
   const canCancel = await hasPermission("cancelar_lancamentos");
   const canAttach = await hasPermission("anexar_documentos");
+  const canEdit = await hasPermission("editar_lancamentos_em_aberto");
 
   const canSettleNow = canSettle && SETTLED_STATUSES.includes(entry.status);
   const canCancelNow = canCancel && ["rascunho", "em_aberto", "agendado"].includes(entry.status);
+  const canEditNow = canEdit && ["rascunho", "em_aberto", "agendado"].includes(entry.status);
+
+  const [{ data: categories }, { data: subcategories }, { data: costCenters }, { data: counterparties }] = canEditNow
+    ? await Promise.all([
+        supabase
+          .from("chart_account_categories")
+          .select("id, name, chart_account_families!inner(type)")
+          .eq("status", "ativo")
+          .eq("chart_account_families.type", type)
+          .order("name"),
+        supabase.from("chart_account_subcategories").select("id, name, category_id").eq("status", "ativo").order("name"),
+        supabase.from("cost_centers").select("id, name").eq("status", "ativo").order("name"),
+        supabase.from("counterparties").select("id, name").eq("status", "ativo").order("name"),
+      ])
+    : [{ data: [] as any[] }, { data: [] as any[] }, { data: [] as any[] }, { data: [] as any[] }];
 
   const actionLabel = type === "despesa" ? "Pagamento" : "Recebimento";
   const installmentGroup = entry.installment_groups as any;
@@ -144,27 +152,43 @@ export async function EntryDetail({ entryId, type }: { entryId: string; type: "r
       )}
 
       <Card>
-        <h2 className="mb-4 text-base font-semibold text-ink">Dados do lançamento</h2>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <InfoRow label="Contraparte" value={(entry.counterparties as any)?.name} />
-          <InfoRow label="Categoria" value={(entry.chart_account_categories as any)?.name} />
-          <InfoRow label="Subcategoria" value={(entry.chart_account_subcategories as any)?.name} />
-          <InfoRow label="Centro de custo" value={(entry.cost_centers as any)?.name} />
-          <InfoRow label="Conta bancária prevista" value={(entry.bank_accounts as any)?.display_name} />
-          <InfoRow label="Forma de pagamento" value={(entry.payment_methods as any)?.name} />
-          <InfoRow label="Data de vencimento" value={formatDate(entry.due_date)} />
-          <InfoRow label="Data de emissão" value={formatDate(entry.issue_date)} />
-          <InfoRow label="Data de competência" value={formatDate(entry.competence_date)} />
-          <InfoRow label="Nº do documento" value={entry.document_number} />
-          {SETTLED_STATUSES.includes(entry.status) && (
-            <InfoRow label="Saldo restante" value={formatCurrency(remainingBalance ?? entry.original_amount)} />
-          )}
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-base font-semibold text-ink">Dados do lançamento</h2>
         </div>
-        {entry.notes && (
-          <div className="mt-4">
-            <InfoRow label="Observações" value={<span className="whitespace-pre-wrap">{entry.notes}</span>} />
-          </div>
-        )}
+        <EntryDetailFields
+          entry={{
+            id: entry.id,
+            description: entry.description,
+            original_amount: Number(entry.original_amount),
+            due_date: entry.due_date,
+            issue_date: entry.issue_date,
+            competence_date: entry.competence_date,
+            document_number: entry.document_number,
+            notes: entry.notes,
+            category_id: entry.category_id,
+            subcategory_id: entry.subcategory_id,
+            cost_center_id: entry.cost_center_id,
+            bank_account_id: entry.bank_account_id,
+            counterparty_id: entry.counterparty_id,
+            payment_method_id: entry.payment_method_id,
+          }}
+          displayValues={{
+            counterparty: (entry.counterparties as any)?.name,
+            category: (entry.chart_account_categories as any)?.name,
+            subcategory: (entry.chart_account_subcategories as any)?.name,
+            costCenter: (entry.cost_centers as any)?.name,
+            bankAccount: (entry.bank_accounts as any)?.display_name,
+            paymentMethod: (entry.payment_methods as any)?.name,
+          }}
+          remainingBalance={SETTLED_STATUSES.includes(entry.status) ? (remainingBalance ?? entry.original_amount) : null}
+          canEditNow={canEditNow}
+          categories={categories ?? []}
+          subcategories={subcategories ?? []}
+          costCenters={costCenters ?? []}
+          bankAccounts={(bankAccounts ?? []) as any}
+          counterparties={counterparties ?? []}
+          paymentMethods={paymentMethods ?? []}
+        />
       </Card>
 
       {canSettleNow && (
