@@ -299,6 +299,7 @@ export type Database = {
           family_id: string;
           name: string;
           code: string | null;
+          type: string;
           managerial_nature: string;
           dre_behavior: string;
           cashflow_behavior: string;
@@ -318,6 +319,7 @@ export type Database = {
           family_id: string;
           name: string;
           code?: string | null;
+          type?: string;
           managerial_nature?: string;
           dre_behavior?: string;
           cashflow_behavior?: string;
@@ -337,6 +339,7 @@ export type Database = {
           family_id?: string;
           name?: string;
           code?: string | null;
+          type?: string;
           managerial_nature?: string;
           dre_behavior?: string;
           cashflow_behavior?: string;
