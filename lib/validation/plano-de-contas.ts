@@ -12,6 +12,9 @@ export const chartCategorySchema = z.object({
   family_id: z.string().uuid("Selecione a família."),
   name: z.string().min(1, "Informe o nome da categoria."),
   code: z.string().optional().or(z.literal("")),
+  type: z.enum(["receita", "despesa", "ambos"], {
+    errorMap: () => ({ message: "Selecione se a categoria é de despesa, receita ou ambos." }),
+  }),
   managerial_nature: z.enum([
     "operacional",
     "financeira",
