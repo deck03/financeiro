@@ -7,12 +7,7 @@ import { NewSubcategoryForm } from "./new-subcategory-form";
 import { FamilyRow } from "./family-row";
 import { CategoryRow } from "./category-row";
 import { SubcategoryRow } from "./subcategory-row";
-import {
-  FAMILY_TYPE_LABELS,
-  MANAGERIAL_NATURE_LABELS,
-  DRE_BEHAVIOR_LABELS,
-  CASHFLOW_BEHAVIOR_LABELS,
-} from "@/lib/labels/plano-de-contas";
+import { CATEGORY_TYPE_LABELS } from "@/lib/labels/plano-de-contas";
 
 export default async function PlanoDeContasPage() {
   const supabase = createClient();
@@ -26,7 +21,7 @@ export default async function PlanoDeContasPage() {
     supabase
       .from("chart_account_categories")
       .select(
-        "id, name, code, status, managerial_nature, dre_behavior, cashflow_behavior, display_order, family_id, chart_account_families(name)"
+        "id, name, code, status, type, managerial_nature, dre_behavior, cashflow_behavior, display_order, family_id, chart_account_families(name)"
       )
       .order("display_order"),
     supabase
@@ -87,41 +82,59 @@ export default async function PlanoDeContasPage() {
         <h2 className="mb-4 text-base font-semibold text-ink">Categorias</h2>
         {canEdit && (
           <div className="mb-5">
-            <NewCategoryForm families={activeFamilies.map((f) => ({ id: f.id, name: f.name }))} />
+            <NewCategoryForm families={activeFamilies.map((f) => ({ id: f.id, name: f.name, type: f.type }))} />
           </div>
         )}
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-base-border text-left text-ink-soft">
-                <th className="py-2 pr-4 font-medium">Nome</th>
-                <th className="py-2 pr-4 font-medium">Família</th>
-                <th className="py-2 pr-4 font-medium">Natureza</th>
-                <th className="py-2 pr-4 font-medium">DRE</th>
-                <th className="py-2 pr-4 font-medium">Fluxo de caixa</th>
-                <th className="py-2 pr-4 font-medium">Status</th>
-                {canEdit && <th className="py-2 pr-4 font-medium">Ações</th>}
-              </tr>
-            </thead>
-            <tbody>
-              {(categories ?? []).map((c: any) => (
-                <CategoryRow
-                  key={c.id}
-                  category={c}
-                  families={activeFamilies.map((f) => ({ id: f.id, name: f.name }))}
-                  canEdit={canEdit}
-                />
-              ))}
-              {(categories ?? []).length === 0 && (
-                <tr>
-                  <td colSpan={7} className="py-4 text-center text-ink-faint">
-                    Nenhuma categoria cadastrada.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+
+        {(["despesa", "receita", "ambos"] as const).map((groupType) => {
+          const groupCategories = (categories ?? []).filter((c: any) => c.type === groupType);
+          const groupLabel =
+            groupType === "despesa"
+              ? "Categorias de despesa"
+              : groupType === "receita"
+                ? "Categorias de receita"
+                : "Categorias de despesa e receita (ambos)";
+          return (
+            <div key={groupType} className="mb-6 last:mb-0">
+              <h3 className="mb-2 text-sm font-semibold text-ink-soft">
+                {groupLabel} ({groupCategories.length})
+              </h3>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-base-border text-left text-ink-soft">
+                      <th className="py-2 pr-4 font-medium">Nome</th>
+                      <th className="py-2 pr-4 font-medium">Família</th>
+                      <th className="py-2 pr-4 font-medium">Tipo</th>
+                      <th className="py-2 pr-4 font-medium">Natureza</th>
+                      <th className="py-2 pr-4 font-medium">DRE</th>
+                      <th className="py-2 pr-4 font-medium">Fluxo de caixa</th>
+                      <th className="py-2 pr-4 font-medium">Status</th>
+                      {canEdit && <th className="py-2 pr-4 font-medium">Ações</th>}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {groupCategories.map((c: any) => (
+                      <CategoryRow
+                        key={c.id}
+                        category={c}
+                        families={activeFamilies.map((f) => ({ id: f.id, name: f.name }))}
+                        canEdit={canEdit}
+                      />
+                    ))}
+                    {groupCategories.length === 0 && (
+                      <tr>
+                        <td colSpan={8} className="py-4 text-center text-ink-faint">
+                          Nenhuma categoria neste grupo.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          );
+        })}
       </Card>
 
       {/* Subcategorias */}
