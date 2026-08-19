@@ -16,6 +16,12 @@ function formatCurrency(value: number) {
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
 }
 
+function formatDate(value: string | null | undefined) {
+  if (!value) return null;
+  const [year, month, day] = value.split("-");
+  return `${day}/${month}/${year}`;
+}
+
 const initialState: FormState = {};
 
 function SubmitButton({ label }: { label: string }) {
@@ -27,7 +33,7 @@ function SubmitButton({ label }: { label: string }) {
   );
 }
 
-type OpenEntry = { id: string; description: string; remaining: number; due_date: string };
+type OpenEntry = { id: string; description: string; remaining: number; due_date: string; competence_date: string | null };
 type Option = { id: string; name: string };
 type CategoryOption = Option & { type: string };
 type Suggestion = {
@@ -71,6 +77,7 @@ export function ReconciliationPanel({
   // Já abre com a categoria sugerida marcada (quando existe), para as
   // subcategorias filtrarem certo assim que o formulário aparece.
   const [selectedCategory, setSelectedCategory] = useState(suggestion?.categoryId ?? "");
+  const [selectedEntryId, setSelectedEntryId] = useState("");
 
   if (existingState.success || newState.success) {
     return <span className="text-xs text-ink-faint">Conciliada</span>;
@@ -104,19 +111,38 @@ export function ReconciliationPanel({
 
   if (mode === "existing") {
     const filteredEntries = openEntries;
+    const selected = filteredEntries.find((e) => e.id === selectedEntryId);
     return (
       <form action={existingAction} className="space-y-2 rounded-card border border-base-border bg-base-bg p-3">
         <input type="hidden" name="bank_transaction_id" value={bankTransactionId} />
-        <Select name="entry_id" required defaultValue="">
+        <Select
+          name="entry_id"
+          required
+          value={selectedEntryId}
+          onChange={(e) => setSelectedEntryId(e.target.value)}
+        >
           <option value="" disabled>
             Selecione o lançamento em aberto
           </option>
-          {filteredEntries.map((e) => (
-            <option key={e.id} value={e.id}>
-              {e.description} — restante {formatCurrency(e.remaining)}
-            </option>
-          ))}
+          {filteredEntries.map((e) => {
+            const venc = formatDate(e.due_date);
+            const comp = formatDate(e.competence_date);
+            return (
+              <option key={e.id} value={e.id}>
+                {e.description} — venc. {venc ?? "—"}
+                {comp ? ` · comp. ${comp}` : ""} — restante {formatCurrency(e.remaining)}
+              </option>
+            );
+          })}
         </Select>
+        {selected && (
+          <p className="text-xs text-ink-soft">
+            Vencimento: <span className="font-medium text-ink">{formatDate(selected.due_date) ?? "—"}</span>
+            {" · "}
+            Competência:{" "}
+            <span className="font-medium text-ink">{formatDate(selected.competence_date) ?? "não informada"}</span>
+          </p>
+        )}
         {filteredEntries.length === 0 && (
           <p className="text-xs text-ink-faint">Nenhum lançamento em aberto do tipo esperado para esta transação.</p>
         )}
