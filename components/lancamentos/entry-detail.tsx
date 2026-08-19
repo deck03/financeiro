@@ -93,9 +93,9 @@ export async function EntryDetail({ entryId, type }: { entryId: string; type: "r
     ? await Promise.all([
         supabase
           .from("chart_account_categories")
-          .select("id, name, chart_account_families!inner(type)")
+          .select("id, name")
           .eq("status", "ativo")
-          .eq("chart_account_families.type", type)
+          .in("type", [type, "ambos"])
           .order("name"),
         supabase.from("chart_account_subcategories").select("id, name, category_id").eq("status", "ativo").order("name"),
         supabase.from("cost_centers").select("id, name").eq("status", "ativo").order("name"),
