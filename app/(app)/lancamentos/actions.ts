@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { requirePermission } from "@/lib/permissions";
 import {
   entrySchema,
+  updateEntrySchema,
   settleSchema,
   cancelSchema,
   reverseSettlementSchema,
@@ -46,24 +47,31 @@ export async function createEntryAction(_prev: FormState, formData: FormData): P
     return { error: "Você não tem permissão para criar lançamentos." };
   }
 
+  // formData.get() retorna null (não undefined) para um campo ausente do
+  // formulário — aqui isso acontece sempre com "issue_date" (nunca teve
+  // input neste formulário) e com "bank_account_id" quando "já foi pago"
+  // está marcado (o campo alterna para settlement_bank_account_id nesse
+  // caso). z.optional() só aceita undefined, não null — sem o "?? ''"
+  // abaixo, isso quebra a validação com o erro genérico "Invalid input"
+  // (mesma causa-raiz já corrigida em outros formulários).
   const parsed = entrySchema.safeParse({
     type: formData.get("type"),
     description: formData.get("description"),
-    counterparty_id: formData.get("counterparty_id"),
+    counterparty_id: formData.get("counterparty_id") ?? "",
     category_id: formData.get("category_id"),
-    subcategory_id: formData.get("subcategory_id"),
-    cost_center_id: formData.get("cost_center_id"),
-    bank_account_id: formData.get("bank_account_id"),
-    payment_method_id: formData.get("payment_method_id"),
+    subcategory_id: formData.get("subcategory_id") ?? "",
+    cost_center_id: formData.get("cost_center_id") ?? "",
+    bank_account_id: formData.get("bank_account_id") ?? "",
+    payment_method_id: formData.get("payment_method_id") ?? "",
     original_amount: formData.get("original_amount"),
-    issue_date: formData.get("issue_date"),
-    competence_date: formData.get("competence_date"),
+    issue_date: formData.get("issue_date") ?? "",
+    competence_date: formData.get("competence_date") ?? "",
     due_date: formData.get("due_date"),
-    document_number: formData.get("document_number"),
-    notes: formData.get("notes"),
+    document_number: formData.get("document_number") ?? "",
+    notes: formData.get("notes") ?? "",
     already_settled: formData.get("already_settled") === "on",
-    settlement_date: formData.get("settlement_date"),
-    settlement_bank_account_id: formData.get("settlement_bank_account_id"),
+    settlement_date: formData.get("settlement_date") ?? "",
+    settlement_bank_account_id: formData.get("settlement_bank_account_id") ?? "",
   });
 
   if (!parsed.success) {
@@ -136,6 +144,108 @@ export async function createEntryAction(_prev: FormState, formData: FormData): P
 
   revalidatePath(data.type === "despesa" ? "/contas-a-pagar" : "/contas-a-receber");
   redirect(data.type === "despesa" ? "/contas-a-pagar" : "/contas-a-receber");
+}
+
+// ---------------------------------------------------------------------------
+// Editar um lançamento ainda em aberto (nunca liquidado, nem parcialmente).
+//
+// A política de RLS já previa esta ação desde a Fase 3 (permissão
+// 'editar_lancamentos_em_aberto'), mas a tela e a action nunca tinham sido
+// construídas. Só é permitido editar enquanto o status é 'rascunho',
+// 'em_aberto' ou 'agendado' — nunca depois de qualquer pagamento/
+// recebimento (mesmo parcial), nem em lançamentos cancelados ou
+// estornados. Isso é checado tanto aqui quanto na tela (defesa em
+// profundidade), e implicitamente pela RLS: como a política de update não
+// restringe por status, é esta checagem em código que garante a regra.
+// ---------------------------------------------------------------------------
+const EDITABLE_STATUSES = ["rascunho", "em_aberto", "agendado"];
+
+export async function updateEntryAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  try {
+    await requirePermission("editar_lancamentos_em_aberto");
+  } catch {
+    return { error: "Você não tem permissão para editar lançamentos." };
+  }
+
+  const parsed = updateEntrySchema.safeParse({
+    entry_id: formData.get("entry_id"),
+    description: formData.get("description"),
+    counterparty_id: formData.get("counterparty_id") ?? "",
+    category_id: formData.get("category_id"),
+    subcategory_id: formData.get("subcategory_id") ?? "",
+    cost_center_id: formData.get("cost_center_id") ?? "",
+    bank_account_id: formData.get("bank_account_id") ?? "",
+    payment_method_id: formData.get("payment_method_id") ?? "",
+    original_amount: formData.get("original_amount"),
+    issue_date: formData.get("issue_date") ?? "",
+    competence_date: formData.get("competence_date") ?? "",
+    due_date: formData.get("due_date"),
+    document_number: formData.get("document_number") ?? "",
+    notes: formData.get("notes") ?? "",
+  });
+
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
+  }
+
+  const { supabase, userId } = await getOrgIdAndUser();
+  const data = parsed.data;
+
+  const { data: current } = await supabase
+    .from("financial_entries")
+    .select("status, type, description, original_amount, due_date")
+    .eq("id", data.entry_id)
+    .single();
+
+  if (!current) {
+    return { error: "Lançamento não encontrado." };
+  }
+  if (!EDITABLE_STATUSES.includes(current.status)) {
+    return {
+      error:
+        "Este lançamento não pode mais ser editado — já foi pago/recebido (mesmo que parcialmente), cancelado ou estornado. Estornar a liquidação libera a edição de novo.",
+    };
+  }
+
+  const { error } = await supabase
+    .from("financial_entries")
+    .update({
+      description: data.description,
+      counterparty_id: emptyToNull(data.counterparty_id),
+      category_id: data.category_id,
+      subcategory_id: emptyToNull(data.subcategory_id),
+      cost_center_id: emptyToNull(data.cost_center_id),
+      bank_account_id: emptyToNull(data.bank_account_id),
+      payment_method_id: emptyToNull(data.payment_method_id),
+      original_amount: data.original_amount,
+      issue_date: emptyToNull(data.issue_date),
+      competence_date: emptyToNull(data.competence_date),
+      due_date: data.due_date,
+      document_number: emptyToNull(data.document_number),
+      notes: emptyToNull(data.notes),
+      updated_by: userId,
+    })
+    .eq("id", data.entry_id);
+
+  if (error) {
+    return { error: "Não foi possível salvar as alterações." };
+  }
+
+  await logAudit({
+    action: "editar",
+    entity: "financial_entries",
+    entityId: data.entry_id,
+    previousValue: {
+      descricao: current.description,
+      valor: current.original_amount,
+      vencimento: current.due_date,
+    },
+    newValue: { descricao: data.description, valor: data.original_amount, vencimento: data.due_date },
+  });
+
+  revalidatePath(current.type === "despesa" ? "/contas-a-pagar" : "/contas-a-receber");
+  revalidatePath(`${current.type === "despesa" ? "/contas-a-pagar" : "/contas-a-receber"}/${data.entry_id}`);
+  return { success: true };
 }
 
 // ---------------------------------------------------------------------------
