@@ -7,9 +7,9 @@ export default async function NovaContaAReceberPage() {
 
   const { data: categories } = await supabase
     .from("chart_account_categories")
-    .select("id, name, chart_account_families!inner(type)")
+    .select("id, name")
     .eq("status", "ativo")
-    .eq("chart_account_families.type", "receita")
+    .in("type", ["receita", "ambos"])
     .order("name");
 
   const categoryIds = (categories ?? []).map((c) => c.id);
