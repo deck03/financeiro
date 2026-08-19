@@ -252,12 +252,17 @@ export async function updateEntryAction(_prev: FormState, formData: FormData): P
 // Liquidar (pagar/receber) um lançamento — integral ou parcial, com encargos.
 // ---------------------------------------------------------------------------
 export async function settleEntryFormAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  // formData.get() retorna null (não undefined) para "notes" — este
+  // formulário nunca teve um campo de observações. z.optional() só aceita
+  // undefined, não null — sem o "?? ''", isso quebra a validação com o
+  // erro genérico "Invalid input" (mesma causa-raiz já corrigida em vários
+  // outros formulários).
   const parsed = settleSchema.safeParse({
     entry_id: formData.get("entry_id"),
     bank_account_id: formData.get("bank_account_id"),
     settlement_date: formData.get("settlement_date"),
-    payment_method_id: formData.get("payment_method_id"),
-    notes: formData.get("notes"),
+    payment_method_id: formData.get("payment_method_id") ?? "",
+    notes: formData.get("notes") ?? "",
     amount: formData.get("amount") || "",
     interest: formData.get("interest") || "0",
     penalty: formData.get("penalty") || "0",
