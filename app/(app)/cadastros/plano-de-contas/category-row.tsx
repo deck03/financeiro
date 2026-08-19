@@ -7,13 +7,14 @@ import { ToggleStatusButton } from "@/components/ui/toggle-status-button";
 import { DeleteButton } from "@/components/cadastros/delete-button";
 import { Input, Label } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
-import { MANAGERIAL_NATURE_LABELS, DRE_BEHAVIOR_LABELS, CASHFLOW_BEHAVIOR_LABELS } from "@/lib/labels/plano-de-contas";
+import { CATEGORY_TYPE_LABELS, MANAGERIAL_NATURE_LABELS, DRE_BEHAVIOR_LABELS, CASHFLOW_BEHAVIOR_LABELS } from "@/lib/labels/plano-de-contas";
 import { updateCategoryAction, toggleCategoryStatusAction, deleteCategoryAction, type FormState } from "./actions";
 
 type Category = {
   id: string;
   name: string;
   status: string;
+  type: string;
   managerial_nature: string;
   dre_behavior: string;
   cashflow_behavior: string;
@@ -47,7 +48,7 @@ export function CategoryRow({
   if (editing) {
     return (
       <tr className="border-b border-base-border last:border-0">
-        <td colSpan={7} className="py-3 pr-4">
+        <td colSpan={8} className="py-3 pr-4">
           <form action={formAction} className="space-y-3 rounded-card border border-base-border bg-base-bg p-3">
             <input type="hidden" name="id" value={c.id} />
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -61,6 +62,16 @@ export function CategoryRow({
                   {families.map((f) => (
                     <option key={f.id} value={f.id}>
                       {f.name}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor={`ec-type-${c.id}`}>Tipo</Label>
+                <Select id={`ec-type-${c.id}`} name="type" defaultValue={c.type}>
+                  {Object.entries(CATEGORY_TYPE_LABELS).map(([v, l]) => (
+                    <option key={v} value={v}>
+                      {l}
                     </option>
                   ))}
                 </Select>
@@ -113,6 +124,19 @@ export function CategoryRow({
     <tr className="border-b border-base-border last:border-0">
       <td className="py-2 pr-4 text-ink">{c.name}</td>
       <td className="py-2 pr-4 text-ink-soft">{c.chart_account_families?.name}</td>
+      <td className="py-2 pr-4">
+        <span
+          className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
+            c.type === "despesa"
+              ? "bg-signal-negativeSoft text-signal-negative"
+              : c.type === "receita"
+                ? "bg-signal-positiveSoft text-signal-positive"
+                : "bg-base-bg text-ink-soft"
+          }`}
+        >
+          {CATEGORY_TYPE_LABELS[c.type]}
+        </span>
+      </td>
       <td className="py-2 pr-4 text-ink-soft">{MANAGERIAL_NATURE_LABELS[c.managerial_nature]}</td>
       <td className="py-2 pr-4 text-ink-soft">{DRE_BEHAVIOR_LABELS[c.dre_behavior]}</td>
       <td className="py-2 pr-4 text-ink-soft">{CASHFLOW_BEHAVIOR_LABELS[c.cashflow_behavior]}</td>
