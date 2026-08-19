@@ -10,6 +10,7 @@ import {
   reverseSettlementSchema,
   installmentPlanSchema,
   recurringRuleSchema,
+  updateRecurringRuleSchema,
   cancelRecurringSchema,
 } from "@/lib/validation/lancamentos";
 import { revalidatePath } from "next/cache";
@@ -574,6 +575,132 @@ export async function createRecurringRuleAction(_prev: FormState, formData: Form
   revalidatePath("/contas-a-pagar");
   revalidatePath("/contas-a-receber");
   redirect("/recorrencias");
+}
+
+// ---------------------------------------------------------------------------
+// Editar uma recorrência já existente.
+//
+// A edição atualiza a regra (recurring_rules) — vale para todas as
+// ocorrências que ainda serão geradas dali em diante. Não é possível mudar
+// a data inicial (start_date) depois de criada, pois isso desalinharia a
+// cadência das ocorrências já geradas.
+//
+// Opcionalmente (quando "apply_to_pending" vem marcado), a mesma alteração
+// também é aplicada às ocorrências já geradas mas ainda em aberto — nunca
+// em ocorrências já pagas/recebidas, canceladas ou estornadas, seguindo a
+// mesma regra usada na edição de um lançamento avulso. Isso evita ter que
+// editar manualmente cada ocorrência pendente uma por uma quando, por
+// exemplo, o valor do aluguel muda.
+// ---------------------------------------------------------------------------
+const RECURRING_PENDING_STATUSES = ["em_aberto", "agendado"];
+
+export async function updateRecurringRuleAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  try {
+    await requirePermission("criar_lancamentos");
+  } catch {
+    return { error: "Você não tem permissão para editar recorrências." };
+  }
+
+  const parsed = updateRecurringRuleSchema.safeParse({
+    rule_id: formData.get("rule_id"),
+    description: formData.get("description"),
+    counterparty_id: formData.get("counterparty_id") ?? "",
+    category_id: formData.get("category_id"),
+    subcategory_id: formData.get("subcategory_id") ?? "",
+    cost_center_id: formData.get("cost_center_id") ?? "",
+    bank_account_id: formData.get("bank_account_id") ?? "",
+    payment_method_id: formData.get("payment_method_id") ?? "",
+    amount: formData.get("amount"),
+    frequency: formData.get("frequency"),
+    interval_count: formData.get("interval_count") || "1",
+    end_date: formData.get("end_date") ?? "",
+    max_occurrences: formData.get("max_occurrences") || "",
+    adjust_business_day: formData.get("adjust_business_day") === "on",
+    competence_anchor_date: formData.get("competence_anchor_date") ?? "",
+    apply_to_pending: formData.get("apply_to_pending") === "on",
+  });
+
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
+  }
+
+  const { supabase, userId } = await getOrgIdAndUser();
+  const data = parsed.data;
+
+  const { data: rule } = await supabase
+    .from("recurring_rules")
+    .select("type, description, amount")
+    .eq("id", data.rule_id)
+    .single();
+
+  if (!rule) {
+    return { error: "Recorrência não encontrada." };
+  }
+
+  const updatePayload = {
+    description: data.description,
+    counterparty_id: emptyToNull(data.counterparty_id),
+    category_id: data.category_id,
+    subcategory_id: emptyToNull(data.subcategory_id),
+    cost_center_id: emptyToNull(data.cost_center_id),
+    bank_account_id: emptyToNull(data.bank_account_id),
+    payment_method_id: emptyToNull(data.payment_method_id),
+    amount: data.amount,
+    frequency: data.frequency,
+    interval_count: data.interval_count ?? 1,
+    end_date: emptyToNull(data.end_date),
+    max_occurrences: data.max_occurrences && data.max_occurrences !== "" ? Number(data.max_occurrences) : null,
+    adjust_business_day: data.adjust_business_day ?? false,
+    competence_anchor_date: emptyToNull(data.competence_anchor_date),
+    updated_by: userId,
+  };
+
+  const { error } = await supabase.from("recurring_rules").update(updatePayload).eq("id", data.rule_id);
+
+  if (error) {
+    return { error: "Não foi possível salvar as alterações da recorrência." };
+  }
+
+  let updatedPendingCount = 0;
+  if (data.apply_to_pending) {
+    const { data: updatedEntries, error: pendingError } = await supabase
+      .from("financial_entries")
+      .update({
+        description: data.description,
+        counterparty_id: emptyToNull(data.counterparty_id),
+        category_id: data.category_id,
+        subcategory_id: emptyToNull(data.subcategory_id),
+        cost_center_id: emptyToNull(data.cost_center_id),
+        bank_account_id: emptyToNull(data.bank_account_id),
+        payment_method_id: emptyToNull(data.payment_method_id),
+        original_amount: data.amount,
+        updated_by: userId,
+      })
+      .eq("recurring_rule_id", data.rule_id)
+      .in("status", RECURRING_PENDING_STATUSES)
+      .select("id");
+
+    if (pendingError) {
+      return {
+        error:
+          "A recorrência foi atualizada, mas não foi possível aplicar a alteração às ocorrências pendentes. Edite-as manualmente se precisar.",
+      };
+    }
+    updatedPendingCount = updatedEntries?.length ?? 0;
+  }
+
+  await logAudit({
+    action: "editar",
+    entity: "recurring_rules",
+    entityId: data.rule_id,
+    previousValue: { descricao: rule.description, valor: rule.amount },
+    newValue: { descricao: data.description, valor: data.amount, ocorrenciasPendentesAtualizadas: updatedPendingCount },
+  });
+
+  revalidatePath("/recorrencias");
+  revalidatePath("/contas-a-pagar");
+  revalidatePath("/contas-a-receber");
+  return { success: true };
 }
 
 // ---------------------------------------------------------------------------
