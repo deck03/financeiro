@@ -86,6 +86,7 @@ export async function createCategoryAction(_prev: FormState, formData: FormData)
     family_id: formData.get("family_id"),
     name: formData.get("name"),
     code: formData.get("code"),
+    type: formData.get("type"),
     managerial_nature: formData.get("managerial_nature"),
     dre_behavior: formData.get("dre_behavior"),
     cashflow_behavior: formData.get("cashflow_behavior"),
@@ -100,6 +101,7 @@ export async function createCategoryAction(_prev: FormState, formData: FormData)
     family_id: parsed.data.family_id,
     name: parsed.data.name,
     code: parsed.data.code || null,
+    type: parsed.data.type,
     managerial_nature: parsed.data.managerial_nature,
     dre_behavior: parsed.data.dre_behavior,
     cashflow_behavior: parsed.data.cashflow_behavior,
@@ -228,8 +230,6 @@ export async function deleteFamilyAction(id: string): Promise<{ error?: string }
 
   if (error) {
     const { translateDeleteError } = await import("@/lib/cadastros/delete-error");
-    // Famílias também são bloqueadas se tiverem categorias abaixo (mesmo que
-    // as categorias em si não estejam em uso) — a mensagem cobre os dois casos.
     return {
       error:
         error.code === "23503"
@@ -258,6 +258,7 @@ export async function updateCategoryAction(_prev: FormState, formData: FormData)
     family_id: formData.get("family_id"),
     name: formData.get("name"),
     code: formData.get("code"),
+    type: formData.get("type"),
     managerial_nature: formData.get("managerial_nature"),
     dre_behavior: formData.get("dre_behavior"),
     cashflow_behavior: formData.get("cashflow_behavior"),
@@ -269,7 +270,7 @@ export async function updateCategoryAction(_prev: FormState, formData: FormData)
   const { supabase, userId } = await getOrgIdAndUser();
   const { data: before } = await supabase
     .from("chart_account_categories")
-    .select("name, family_id, managerial_nature, dre_behavior, cashflow_behavior")
+    .select("name, family_id, type, managerial_nature, dre_behavior, cashflow_behavior")
     .eq("id", id)
     .single();
 
@@ -277,6 +278,7 @@ export async function updateCategoryAction(_prev: FormState, formData: FormData)
     .from("chart_account_categories")
     .update({
       family_id: parsed.data.family_id,
+      type: parsed.data.type,
       name: parsed.data.name,
       code: parsed.data.code || null,
       managerial_nature: parsed.data.managerial_nature,
