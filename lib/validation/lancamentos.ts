@@ -97,6 +97,25 @@ export const recurringRuleSchema = z.object({
   competence_anchor_date: z.string().optional().or(z.literal("")),
 });
 
+export const updateRecurringRuleSchema = z.object({
+  rule_id: z.string().uuid(),
+  description: z.string().min(1, "Informe a descrição."),
+  counterparty_id: z.string().uuid().optional().or(z.literal("")),
+  category_id: z.string().uuid("Selecione a categoria."),
+  subcategory_id: z.string().uuid().optional().or(z.literal("")),
+  cost_center_id: z.string().uuid().optional().or(z.literal("")),
+  bank_account_id: z.string().uuid().optional().or(z.literal("")),
+  payment_method_id: z.string().uuid().optional().or(z.literal("")),
+  amount: z.coerce.number().positive("Informe um valor maior que zero."),
+  frequency: z.enum(["semanal", "mensal", "bimestral", "trimestral", "semestral", "anual"]),
+  interval_count: z.coerce.number().int().min(1).default(1),
+  end_date: z.string().optional().or(z.literal("")),
+  max_occurrences: z.string().optional(),
+  adjust_business_day: z.coerce.boolean().optional(),
+  competence_anchor_date: z.string().optional().or(z.literal("")),
+  apply_to_pending: z.coerce.boolean().optional(),
+});
+
 export const cancelRecurringSchema = z.object({
   rule_id: z.string().uuid(),
   scope: z.enum(["uma", "futuras", "toda"]),
