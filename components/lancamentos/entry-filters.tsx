@@ -9,7 +9,19 @@ import { ENTRY_STATUS_LABELS } from "@/lib/labels/lancamentos";
 
 const RELEVANT_STATUSES = ["em_aberto", "agendado", "vencido", "parcialmente_pago", "parcialmente_recebido", "pago", "recebido", "cancelado"];
 
-export function EntryFilters({ type }: { type: "receita" | "despesa" }) {
+type Option = { id: string; name: string };
+
+export function EntryFilters({
+  type,
+  categories,
+  subcategories,
+  counterparties,
+}: {
+  type: "receita" | "despesa";
+  categories: Option[];
+  subcategories: (Option & { category_id: string })[];
+  counterparties: Option[];
+}) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -19,6 +31,11 @@ export function EntryFilters({ type }: { type: "receita" | "despesa" }) {
   const [from, setFrom] = useState(searchParams.get("from") ?? "");
   const [to, setTo] = useState(searchParams.get("to") ?? "");
 
+  const selectedCategory = searchParams.get("category_id") ?? "";
+  const filteredSubcategories = selectedCategory
+    ? subcategories.filter((s) => s.category_id === selectedCategory)
+    : subcategories;
+
   function updateParam(key: string, value: string) {
     const params = new URLSearchParams(searchParams.toString());
     if (value) {
@@ -26,6 +43,19 @@ export function EntryFilters({ type }: { type: "receita" | "despesa" }) {
     } else {
       params.delete(key);
     }
+    startTransition(() => {
+      router.push(`${pathname}?${params.toString()}`);
+    });
+  }
+
+  function handleCategoryChange(value: string) {
+    // Trocar a categoria invalida a subcategoria escolhida anteriormente
+    // (ela pode não pertencer mais à nova categoria) — limpa as duas de
+    // uma vez, num único push de URL.
+    const params = new URLSearchParams(searchParams.toString());
+    if (value) params.set("category_id", value);
+    else params.delete("category_id");
+    params.delete("subcategory_id");
     startTransition(() => {
       router.push(`${pathname}?${params.toString()}`);
     });
@@ -56,6 +86,18 @@ export function EntryFilters({ type }: { type: "receita" | "despesa" }) {
     });
   }
 
+  const hasMoreFilters = selectedCategory || searchParams.get("subcategory_id") || searchParams.get("counterparty_id");
+
+  function clearMoreFilters() {
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("category_id");
+    params.delete("subcategory_id");
+    params.delete("counterparty_id");
+    startTransition(() => {
+      router.push(`${pathname}?${params.toString()}`);
+    });
+  }
+
   return (
     <form onSubmit={handleSearchSubmit} className="mb-4 flex flex-wrap items-end gap-3">
       <div className="min-w-[220px] flex-1">
@@ -78,6 +120,48 @@ export function EntryFilters({ type }: { type: "receita" | "despesa" }) {
           ))}
         </Select>
       </div>
+      <div className="w-44">
+        <label className="mb-1 block text-xs font-medium text-ink-soft">Categoria</label>
+        <Select value={selectedCategory} onChange={(e) => handleCategoryChange(e.target.value)}>
+          <option value="">Todas as categorias</option>
+          {categories.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}
+            </option>
+          ))}
+        </Select>
+      </div>
+      <div className="w-44">
+        <label className="mb-1 block text-xs font-medium text-ink-soft">Subcategoria</label>
+        <Select
+          value={searchParams.get("subcategory_id") ?? ""}
+          onChange={(e) => updateParam("subcategory_id", e.target.value)}
+          disabled={filteredSubcategories.length === 0}
+        >
+          <option value="">Todas</option>
+          {filteredSubcategories.map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.name}
+            </option>
+          ))}
+        </Select>
+      </div>
+      <div className="w-48">
+        <label className="mb-1 block text-xs font-medium text-ink-soft">
+          {type === "despesa" ? "Fornecedor" : "Contraparte"}
+        </label>
+        <Select
+          value={searchParams.get("counterparty_id") ?? ""}
+          onChange={(e) => updateParam("counterparty_id", e.target.value)}
+        >
+          <option value="">Todos</option>
+          {counterparties.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}
+            </option>
+          ))}
+        </Select>
+      </div>
       <div className="w-36">
         <label className="mb-1 block text-xs font-medium text-ink-soft">Vencimento de</label>
         <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
@@ -92,6 +176,11 @@ export function EntryFilters({ type }: { type: "receita" | "despesa" }) {
       {(from || to) && (
         <Button type="button" variant="ghost" onClick={clearPeriod} disabled={isPending}>
           Limpar período
+        </Button>
+      )}
+      {hasMoreFilters && (
+        <Button type="button" variant="ghost" onClick={clearMoreFilters} disabled={isPending}>
+          Limpar categoria/fornecedor
         </Button>
       )}
     </form>
