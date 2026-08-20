@@ -37,7 +37,7 @@ export async function createFamilyAction(_prev: FormState, formData: FormData): 
 
   const parsed = chartFamilySchema.safeParse({
     name: formData.get("name"),
-    code: formData.get("code"),
+    code: formData.get("code") ?? "",
     type: formData.get("type"),
   });
   if (!parsed.success) {
@@ -85,7 +85,7 @@ export async function createCategoryAction(_prev: FormState, formData: FormData)
   const parsed = chartCategorySchema.safeParse({
     family_id: formData.get("family_id"),
     name: formData.get("name"),
-    code: formData.get("code"),
+    code: formData.get("code") ?? "",
     type: formData.get("type"),
     managerial_nature: formData.get("managerial_nature"),
     dre_behavior: formData.get("dre_behavior"),
@@ -144,7 +144,7 @@ export async function createSubcategoryAction(_prev: FormState, formData: FormDa
   const parsed = chartSubcategorySchema.safeParse({
     category_id: formData.get("category_id"),
     name: formData.get("name"),
-    code: formData.get("code"),
+    code: formData.get("code") ?? "",
   });
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
@@ -191,7 +191,7 @@ export async function updateFamilyAction(_prev: FormState, formData: FormData): 
   const id = formData.get("id") as string;
   const parsed = chartFamilySchema.safeParse({
     name: formData.get("name"),
-    code: formData.get("code"),
+    code: formData.get("code") ?? "",
     type: formData.get("type"),
   });
   if (!parsed.success) {
@@ -230,6 +230,8 @@ export async function deleteFamilyAction(id: string): Promise<{ error?: string }
 
   if (error) {
     const { translateDeleteError } = await import("@/lib/cadastros/delete-error");
+    // Famílias também são bloqueadas se tiverem categorias abaixo (mesmo que
+    // as categorias em si não estejam em uso) — a mensagem cobre os dois casos.
     return {
       error:
         error.code === "23503"
@@ -257,7 +259,7 @@ export async function updateCategoryAction(_prev: FormState, formData: FormData)
   const parsed = chartCategorySchema.safeParse({
     family_id: formData.get("family_id"),
     name: formData.get("name"),
-    code: formData.get("code"),
+    code: formData.get("code") ?? "",
     type: formData.get("type"),
     managerial_nature: formData.get("managerial_nature"),
     dre_behavior: formData.get("dre_behavior"),
@@ -340,7 +342,7 @@ export async function updateSubcategoryAction(_prev: FormState, formData: FormDa
   const parsed = chartSubcategorySchema.safeParse({
     category_id: formData.get("category_id"),
     name: formData.get("name"),
-    code: formData.get("code"),
+    code: formData.get("code") ?? "",
   });
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
