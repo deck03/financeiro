@@ -5,7 +5,7 @@ import { EntryStatusBadge } from "@/components/ui/entry-status-badge";
 import { SettleForm } from "./settle-form";
 import { CancelForm } from "./cancel-form";
 import { AttachmentsPanel } from "./attachments-panel";
-import { ReverseSettlementButton } from "./reverse-settlement-button";
+import { SettlementRow } from "./settlement-row";
 import { EntryDetailFields } from "./entry-detail-fields";
 import { notFound } from "next/navigation";
 import Link from "next/link";
@@ -53,7 +53,9 @@ export async function EntryDetail({ entryId, type }: { entryId: string; type: "r
   ] = await Promise.all([
     supabase
       .from("financial_settlements")
-      .select("id, amount, interest, penalty, discount, addition, settlement_date, status, notes, bank_accounts(display_name)")
+      .select(
+        "id, amount, interest, penalty, discount, addition, settlement_date, status, notes, bank_account_id, payment_method_id, bank_accounts(display_name)"
+      )
       .eq("entry_id", entryId)
       .order("settlement_date", { ascending: false }),
     supabase
@@ -82,6 +84,7 @@ export async function EntryDetail({ entryId, type }: { entryId: string; type: "r
       ? await hasPermission("pagamentos_parciais")
       : await hasPermission("recebimentos_parciais");
   const canCancel = await hasPermission("cancelar_lancamentos");
+  const canEditSettlement = canCancel; // mesma permissão usada na action updateSettlementAction
   const canAttach = await hasPermission("anexar_documentos");
   const canEdit = await hasPermission("editar_lancamentos_em_aberto");
 
@@ -226,37 +229,17 @@ export async function EntryDetail({ entryId, type }: { entryId: string; type: "r
               </tr>
             </thead>
             <tbody>
-              {(settlements ?? []).map((s: any) => {
-                const charges: string[] = [];
-                if (s.interest > 0) charges.push(`Juros ${formatCurrency(s.interest)}`);
-                if (s.penalty > 0) charges.push(`Multa ${formatCurrency(s.penalty)}`);
-                if (s.addition > 0) charges.push(`Acréscimo ${formatCurrency(s.addition)}`);
-                if (s.discount > 0) charges.push(`Desconto ${formatCurrency(s.discount)}`);
-
-                return (
-                  <tr key={s.id} className="border-b border-base-border last:border-0">
-                    <td className="py-2 pr-4 text-ink-soft">{formatDate(s.settlement_date)}</td>
-                    <td className="py-2 pr-4 text-ink-soft">{s.bank_accounts?.display_name}</td>
-                    <td className="num py-2 pr-4 text-ink">{formatCurrency(s.amount)}</td>
-                    <td className="py-2 pr-4 text-xs text-ink-faint">{charges.join(", ") || "—"}</td>
-                    <td className="py-2 pr-4 text-ink-soft">{s.status === "valido" ? "Válida" : "Estornada"}</td>
-                    {canCancel && (
-                      <td className="py-2 pr-4">
-                        {s.status === "valido" && <ReverseSettlementButton settlementId={s.id} />}
-                      </td>
-                    )}
-                    {type === "receita" && (
-                      <td className="py-2 pr-4">
-                        {s.status === "valido" && (
-                          <Link href={`/recibos/novo?settlement=${s.id}`} className="text-sm font-medium text-brand-accent hover:underline">
-                            Emitir recibo
-                          </Link>
-                        )}
-                      </td>
-                    )}
-                  </tr>
-                );
-              })}
+              {(settlements ?? []).map((s: any) => (
+                <SettlementRow
+                  key={s.id}
+                  settlement={s}
+                  type={type}
+                  canCancel={canCancel}
+                  canEditSettlement={canEditSettlement}
+                  bankAccounts={(bankAccounts ?? []) as any}
+                  paymentMethods={paymentMethods ?? []}
+                />
+              ))}
               {(settlements ?? []).length === 0 && (
                 <tr>
                   <td colSpan={canCancel ? (type === "receita" ? 7 : 6) : (type === "receita" ? 6 : 5)} className="py-4 text-center text-ink-faint">
