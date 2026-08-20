@@ -815,10 +815,14 @@ export async function generateMoreOccurrencesAction(ruleId: string) {
 // Cancelar ocorrências de uma recorrência, por escopo.
 // ---------------------------------------------------------------------------
 export async function cancelRecurringFormAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  // formData.get() retorna null (não undefined) para "from_entry_id" quando
+  // o escopo escolhido é "toda" (o padrão) — o campo só existe no
+  // formulário para os escopos "uma"/"futuras". Mesma causa-raiz já
+  // corrigida em vários outros formulários.
   const parsed = cancelRecurringSchema.safeParse({
     rule_id: formData.get("rule_id"),
     scope: formData.get("scope"),
-    from_entry_id: formData.get("from_entry_id"),
+    from_entry_id: formData.get("from_entry_id") ?? "",
   });
 
   if (!parsed.success) {
