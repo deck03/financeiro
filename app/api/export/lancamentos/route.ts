@@ -41,6 +41,9 @@ export async function GET(request: NextRequest) {
   const status = params.get("status") ?? "";
   const from = params.get("from") ?? "";
   const to = params.get("to") ?? "";
+  const categoryId = params.get("category_id") ?? "";
+  const subcategoryId = params.get("subcategory_id") ?? "";
+  const counterpartyId = params.get("counterparty_id") ?? "";
   const today = new Date().toISOString().slice(0, 10);
 
   let query = supabase
@@ -54,6 +57,9 @@ export async function GET(request: NextRequest) {
   if (q) query = query.ilike("description", `%${q}%`);
   if (from) query = query.gte("due_date", from);
   if (to) query = query.lte("due_date", to);
+  if (categoryId) query = query.eq("category_id", categoryId);
+  if (subcategoryId) query = query.eq("subcategory_id", subcategoryId);
+  if (counterpartyId) query = query.eq("counterparty_id", counterpartyId);
   if (status === "vencido") {
     query = query.in("status", OPEN_STATUSES).lt("due_date", today);
   } else if (status) {
@@ -106,7 +112,15 @@ export async function GET(request: NextRequest) {
     metadata: {
       tela: slug,
       formato: format,
-      filtros: { q: q || null, status: status || null, from: from || null, to: to || null },
+      filtros: {
+        q: q || null,
+        status: status || null,
+        from: from || null,
+        to: to || null,
+        categoryId: categoryId || null,
+        subcategoryId: subcategoryId || null,
+        counterpartyId: counterpartyId || null,
+      },
       linhas: count,
     },
   });
