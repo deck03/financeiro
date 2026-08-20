@@ -151,16 +151,17 @@ export async function createEntryAction(_prev: FormState, formData: FormData): P
 // Editar um lançamento ainda em aberto (nunca liquidado, nem parcialmente).
 //
 // A política de RLS já previa esta ação desde a Fase 3 (permissão
-// 'editar_lancamentos_em_aberto'), mas a tela e a action nunca tinham sido
-// construídas. Só é permitido editar enquanto o status é 'rascunho',
-// 'em_aberto' ou 'agendado' — nunca depois de qualquer pagamento/
-// recebimento (mesmo parcial), nem em lançamentos cancelados ou
-// estornados. Isso é checado tanto aqui quanto na tela (defesa em
-// profundidade), e implicitamente pela RLS: como a política de update não
-// restringe por status, é esta checagem em código que garante a regra.
+// 'editar_lancamentos_em_aberto'). A pedido do usuário, a edição passou a
+// valer para QUALQUER lançamento, independente do status — inclusive já
+// pago/recebido (mesmo parcialmente), cancelado ou estornado — sem
+// precisar estornar a liquidação antes só para corrigir um dado (ex.:
+// categoria errada, descrição com erro de digitação).
+//
+// Atenção: alterar o valor (original_amount) de um lançamento que já tem
+// liquidação registrada muda o saldo restante calculado (original_amount
+// menos a soma das liquidações válidas) — a tela avisa sobre isso, mas a
+// action não bloqueia, por decisão explícita do usuário.
 // ---------------------------------------------------------------------------
-const EDITABLE_STATUSES = ["rascunho", "em_aberto", "agendado"];
-
 export async function updateEntryAction(_prev: FormState, formData: FormData): Promise<FormState> {
   try {
     await requirePermission("editar_lancamentos_em_aberto");
@@ -200,12 +201,6 @@ export async function updateEntryAction(_prev: FormState, formData: FormData): P
 
   if (!current) {
     return { error: "Lançamento não encontrado." };
-  }
-  if (!EDITABLE_STATUSES.includes(current.status)) {
-    return {
-      error:
-        "Este lançamento não pode mais ser editado — já foi pago/recebido (mesmo que parcialmente), cancelado ou estornado. Estornar a liquidação libera a edição de novo.",
-    };
   }
 
   const { error } = await supabase
