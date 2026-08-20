@@ -1,294 +1,200 @@
-import { createClient } from "@/lib/supabase/server";
-import { hasPermission } from "@/lib/permissions";
-import { Card } from "@/components/ui/card";
-import { EntryStatusBadge } from "@/components/ui/entry-status-badge";
-import { SettleForm } from "./settle-form";
-import { CancelForm } from "./cancel-form";
-import { AttachmentsPanel } from "./attachments-panel";
-import { ReverseSettlementButton } from "./reverse-settlement-button";
-import { EntryDetailFields } from "./entry-detail-fields";
-import { notFound } from "next/navigation";
-import Link from "next/link";
+"use client";
 
-function formatCurrency(value: number) {
-  return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
+import { useState } from "react";
+import { useFormState, useFormStatus } from "react-dom";
+import { updateEntryAction, type FormState } from "@/app/(app)/lancamentos/actions";
+import { Button } from "@/components/ui/button";
+import { Input, Label } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
+
+const initialState: FormState = {};
+
+type Option = { id: string; name: string };
+
+function SubmitButton() {
+  const { pending } = useFormStatus();
+  return (
+    <Button type="submit" disabled={pending}>
+      {pending ? "Salvando..." : "Salvar alterações"}
+    </Button>
+  );
 }
 
-function formatDate(value: string | null) {
-  if (!value) return "—";
-  const [year, month, day] = value.split("-");
-  return `${day}/${month}/${year}`;
-}
+export function EditEntryForm({
+  entry,
+  categories,
+  subcategories,
+  costCenters,
+  bankAccounts,
+  counterparties,
+  paymentMethods,
+  hasSettlement,
+  onCancel,
+}: {
+  entry: {
+    id: string;
+    description: string;
+    original_amount: number;
+    due_date: string;
+    issue_date: string | null;
+    competence_date: string | null;
+    document_number: string | null;
+    notes: string | null;
+    category_id: string | null;
+    subcategory_id: string | null;
+    cost_center_id: string | null;
+    bank_account_id: string | null;
+    counterparty_id: string | null;
+    payment_method_id: string | null;
+  };
+  categories: Option[];
+  subcategories: (Option & { category_id: string })[];
+  costCenters: Option[];
+  bankAccounts: (Option & { ownership: string })[];
+  counterparties: Option[];
+  paymentMethods: Option[];
+  hasSettlement: boolean;
+  onCancel: () => void;
+}) {
+  const [state, formAction] = useFormState(updateEntryAction, initialState);
+  const [selectedCategory, setSelectedCategory] = useState(entry.category_id ?? "");
 
-const SETTLED_STATUSES = ["em_aberto", "agendado", "parcialmente_pago", "parcialmente_recebido"];
-
-export async function EntryDetail({ entryId, type }: { entryId: string; type: "receita" | "despesa" }) {
-  const supabase = createClient();
-  const basePath = type === "despesa" ? "/contas-a-pagar" : "/contas-a-receber";
-
-  const { data: entry } = await supabase
-    .from("financial_entries")
-    .select(
-      `id, description, original_amount, due_date, issue_date, competence_date, document_number,
-       notes, status, type, organization_id, installment_group_id, installment_number, installment_total,
-       recurring_rule_id, counterparty_id, category_id, subcategory_id, cost_center_id, bank_account_id, payment_method_id,
-       counterparties(name), chart_account_categories(name), chart_account_subcategories(name),
-       cost_centers(name), bank_accounts(display_name), payment_methods(name),
-       installment_groups(description, installments_count),
-       recurring_rules(description, frequency)`
-    )
-    .eq("id", entryId)
-    .eq("type", type)
-    .single();
-
-  if (!entry) notFound();
-
-  const [
-    { data: settlements },
-    { data: attachments },
-    { data: bankAccounts },
-    { data: paymentMethods },
-    { data: remainingBalance },
-    { data: siblings },
-  ] = await Promise.all([
-    supabase
-      .from("financial_settlements")
-      .select("id, amount, interest, penalty, discount, addition, settlement_date, status, notes, bank_accounts(display_name)")
-      .eq("entry_id", entryId)
-      .order("settlement_date", { ascending: false }),
-    supabase
-      .from("attachments")
-      .select("id, file_name, file_path, file_size, created_at")
-      .eq("entry_id", entryId)
-      .order("created_at", { ascending: false }),
-    supabase.from("bank_accounts").select("id, name:display_name, ownership").eq("status", "ativa").order("display_name"),
-    supabase.from("payment_methods").select("id, name").eq("status", "ativo").order("name"),
-    supabase.rpc("entry_remaining_balance", { p_entry_id: entryId }),
-    entry.installment_group_id
-      ? supabase
-          .from("financial_entries")
-          .select("id, description, due_date, status, original_amount, installment_number")
-          .eq("installment_group_id", entry.installment_group_id)
-          .order("installment_number", { ascending: true })
-      : Promise.resolve({ data: [] as any[] }),
-  ]);
-
-  const canSettle =
-    type === "despesa"
-      ? await hasPermission("registrar_pagamentos")
-      : await hasPermission("registrar_recebimentos");
-  const canPartial =
-    type === "despesa"
-      ? await hasPermission("pagamentos_parciais")
-      : await hasPermission("recebimentos_parciais");
-  const canCancel = await hasPermission("cancelar_lancamentos");
-  const canAttach = await hasPermission("anexar_documentos");
-  const canEdit = await hasPermission("editar_lancamentos_em_aberto");
-
-  const canSettleNow = canSettle && SETTLED_STATUSES.includes(entry.status);
-  const canCancelNow = canCancel && ["rascunho", "em_aberto", "agendado"].includes(entry.status);
-  // A pedido do usuário, a edição vale para qualquer lançamento,
-  // independente do status — não precisa mais estornar antes de corrigir
-  // um dado (categoria errada, descrição etc.), mesmo já pago/recebido.
-  const canEditNow = canEdit;
-  const hasSettlement = !["rascunho", "em_aberto", "agendado", "cancelado"].includes(entry.status);
-
-  const [{ data: categories }, { data: subcategories }, { data: costCenters }, { data: counterparties }] = canEditNow
-    ? await Promise.all([
-        supabase
-          .from("chart_account_categories")
-          .select("id, name")
-          .eq("status", "ativo")
-          .in("type", [type, "ambos"])
-          .order("name"),
-        supabase.from("chart_account_subcategories").select("id, name, category_id").eq("status", "ativo").order("name"),
-        supabase.from("cost_centers").select("id, name").eq("status", "ativo").order("name"),
-        supabase.from("counterparties").select("id, name").eq("status", "ativo").order("name"),
-      ])
-    : [{ data: [] as any[] }, { data: [] as any[] }, { data: [] as any[] }, { data: [] as any[] }];
-
-  const actionLabel = type === "despesa" ? "Pagamento" : "Recebimento";
-  const installmentGroup = entry.installment_groups as any;
-  const recurringRule = entry.recurring_rules as any;
+  const filteredSubcategories = subcategories.filter((s) => s.category_id === selectedCategory);
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-start justify-between">
-        <div>
-          <h1 className="text-xl font-semibold text-ink">{entry.description}</h1>
-          <p className="num mt-1 text-2xl font-semibold text-ink">{formatCurrency(entry.original_amount)}</p>
+    <form action={formAction} className="space-y-3">
+      <input type="hidden" name="entry_id" value={entry.id} />
+
+      {hasSettlement && (
+        <p className="rounded-card bg-signal-negativeSoft px-3 py-2 text-xs text-signal-negative">
+          Este lançamento já tem pagamento/recebimento registrado. Mudar o valor aqui não altera
+          o que já foi liquidado — só recalcula o saldo restante exibido. Se o que você quer é
+          corrigir o valor pago/recebido de verdade, estorne a liquidação em vez de editar aqui.
+        </p>
+      )}
+
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="sm:col-span-2">
+          <Label htmlFor="ee-description">Descrição</Label>
+          <Input id="ee-description" name="description" defaultValue={entry.description} required />
         </div>
-        <EntryStatusBadge status={entry.status} dueDate={entry.due_date} />
+
+        <div>
+          <Label htmlFor="ee-amount">Valor</Label>
+          <Input id="ee-amount" name="original_amount" type="number" step="0.01" min="0.01" defaultValue={entry.original_amount} required />
+        </div>
+        <div>
+          <Label htmlFor="ee-due-date">Data de vencimento</Label>
+          <Input id="ee-due-date" name="due_date" type="date" defaultValue={entry.due_date} required />
+        </div>
+
+        <div>
+          <Label htmlFor="ee-category">Categoria</Label>
+          <Select
+            id="ee-category"
+            name="category_id"
+            required
+            value={selectedCategory}
+            onChange={(e) => setSelectedCategory(e.target.value)}
+          >
+            <option value="" disabled>
+              Selecione
+            </option>
+            {categories.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </Select>
+        </div>
+        <div>
+          <Label htmlFor="ee-subcategory">Subcategoria (opcional)</Label>
+          <Select id="ee-subcategory" name="subcategory_id" defaultValue={entry.subcategory_id ?? ""} disabled={filteredSubcategories.length === 0}>
+            <option value="">Nenhuma</option>
+            {filteredSubcategories.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </Select>
+        </div>
+
+        <div>
+          <Label htmlFor="ee-counterparty">Contraparte (opcional)</Label>
+          <Select id="ee-counterparty" name="counterparty_id" defaultValue={entry.counterparty_id ?? ""}>
+            <option value="">Nenhuma</option>
+            {counterparties.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </Select>
+        </div>
+        <div>
+          <Label htmlFor="ee-cost-center">Centro de custo (opcional)</Label>
+          <Select id="ee-cost-center" name="cost_center_id" defaultValue={entry.cost_center_id ?? ""}>
+            <option value="">Nenhum</option>
+            {costCenters.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </Select>
+        </div>
+
+        <div>
+          <Label htmlFor="ee-bank-account">Conta bancária prevista (opcional)</Label>
+          <Select id="ee-bank-account" name="bank_account_id" defaultValue={entry.bank_account_id ?? ""}>
+            <option value="">Ainda não definida</option>
+            {bankAccounts.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.name} {a.ownership === "pessoa_fisica" ? "(pessoal)" : ""}
+              </option>
+            ))}
+          </Select>
+        </div>
+        <div>
+          <Label htmlFor="ee-payment-method">Forma de pagamento prevista (opcional)</Label>
+          <Select id="ee-payment-method" name="payment_method_id" defaultValue={entry.payment_method_id ?? ""}>
+            <option value="">Nenhuma</option>
+            {paymentMethods.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.name}
+              </option>
+            ))}
+          </Select>
+        </div>
+
+        <div>
+          <Label htmlFor="ee-document">Nº do documento (opcional)</Label>
+          <Input id="ee-document" name="document_number" defaultValue={entry.document_number ?? ""} />
+        </div>
+        <div>
+          <Label htmlFor="ee-competence">Data de competência (opcional)</Label>
+          <Input id="ee-competence" name="competence_date" type="date" defaultValue={entry.competence_date ?? ""} />
+        </div>
+        <div>
+          <Label htmlFor="ee-issue-date">Data de emissão (opcional)</Label>
+          <Input id="ee-issue-date" name="issue_date" type="date" defaultValue={entry.issue_date ?? ""} />
+        </div>
+
+        <div className="sm:col-span-2">
+          <Label htmlFor="ee-notes">Observações (opcional)</Label>
+          <Input id="ee-notes" name="notes" defaultValue={entry.notes ?? ""} />
+        </div>
       </div>
 
-      {installmentGroup && (
-        <Card>
-          <p className="text-sm text-ink-soft">
-            Parcela <span className="font-medium text-ink">{entry.installment_number}</span> de{" "}
-            <span className="font-medium text-ink">{entry.installment_total}</span> —{" "}
-            {installmentGroup.description}
-          </p>
-          <div className="mt-3 flex flex-wrap gap-2">
-            {(siblings ?? []).map((s: any) => (
-              <Link
-                key={s.id}
-                href={`${basePath}/${s.id}`}
-                className={`rounded-full px-2.5 py-0.5 text-xs ${
-                  s.id === entry.id ? "bg-brand-accentSoft text-brand-accent" : "bg-base-bg text-ink-soft hover:text-ink"
-                }`}
-              >
-                {s.installment_number}/{entry.installment_total} · {formatDate(s.due_date)}
-              </Link>
-            ))}
-          </div>
-        </Card>
+      {state.error && (
+        <p className="rounded-card bg-signal-negativeSoft px-3 py-2 text-sm text-signal-negative">{state.error}</p>
       )}
+      {state.success && <p className="text-sm text-signal-positive">Alterações salvas.</p>}
 
-      {recurringRule && (
-        <Card>
-          <p className="text-sm text-ink-soft">
-            Gerado pela recorrência <span className="font-medium text-ink">{recurringRule.description}</span>.{" "}
-            <Link href="/recorrencias" className="text-brand-accent hover:underline">
-              Ver recorrência
-            </Link>
-          </p>
-        </Card>
-      )}
-
-      <Card>
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-base font-semibold text-ink">Dados do lançamento</h2>
-        </div>
-        <EntryDetailFields
-          entry={{
-            id: entry.id,
-            description: entry.description,
-            original_amount: Number(entry.original_amount),
-            due_date: entry.due_date,
-            issue_date: entry.issue_date,
-            competence_date: entry.competence_date,
-            document_number: entry.document_number,
-            notes: entry.notes,
-            category_id: entry.category_id,
-            subcategory_id: entry.subcategory_id,
-            cost_center_id: entry.cost_center_id,
-            bank_account_id: entry.bank_account_id,
-            counterparty_id: entry.counterparty_id,
-            payment_method_id: entry.payment_method_id,
-          }}
-          displayValues={{
-            counterparty: (entry.counterparties as any)?.name,
-            category: (entry.chart_account_categories as any)?.name,
-            subcategory: (entry.chart_account_subcategories as any)?.name,
-            costCenter: (entry.cost_centers as any)?.name,
-            bankAccount: (entry.bank_accounts as any)?.display_name,
-            paymentMethod: (entry.payment_methods as any)?.name,
-          }}
-          remainingBalance={SETTLED_STATUSES.includes(entry.status) ? (remainingBalance ?? entry.original_amount) : null}
-          canEditNow={canEditNow}
-          hasSettlement={hasSettlement}
-          categories={categories ?? []}
-          subcategories={subcategories ?? []}
-          costCenters={costCenters ?? []}
-          bankAccounts={(bankAccounts ?? []) as any}
-          counterparties={counterparties ?? []}
-          paymentMethods={paymentMethods ?? []}
-        />
-      </Card>
-
-      {canSettleNow && (
-        <Card>
-          <h2 className="mb-4 text-base font-semibold text-ink">{actionLabel}</h2>
-          <SettleForm
-            entryId={entry.id}
-            type={type}
-            remainingBalance={remainingBalance ?? entry.original_amount}
-            bankAccounts={(bankAccounts ?? []) as any}
-            paymentMethods={paymentMethods ?? []}
-            canPartial={canPartial}
-          />
-        </Card>
-      )}
-
-      <Card>
-        <h2 className="mb-4 text-base font-semibold text-ink">Histórico de liquidações</h2>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-base-border text-left text-ink-soft">
-                <th className="py-2 pr-4 font-medium">Data</th>
-                <th className="py-2 pr-4 font-medium">Conta</th>
-                <th className="py-2 pr-4 font-medium num">Valor</th>
-                <th className="py-2 pr-4 font-medium">Encargos</th>
-                <th className="py-2 pr-4 font-medium">Status</th>
-                {canCancel && <th className="py-2 pr-4 font-medium">Ações</th>}
-                {type === "receita" && <th className="py-2 pr-4 font-medium">Recibo</th>}
-              </tr>
-            </thead>
-            <tbody>
-              {(settlements ?? []).map((s: any) => {
-                const charges: string[] = [];
-                if (s.interest > 0) charges.push(`Juros ${formatCurrency(s.interest)}`);
-                if (s.penalty > 0) charges.push(`Multa ${formatCurrency(s.penalty)}`);
-                if (s.addition > 0) charges.push(`Acréscimo ${formatCurrency(s.addition)}`);
-                if (s.discount > 0) charges.push(`Desconto ${formatCurrency(s.discount)}`);
-
-                return (
-                  <tr key={s.id} className="border-b border-base-border last:border-0">
-                    <td className="py-2 pr-4 text-ink-soft">{formatDate(s.settlement_date)}</td>
-                    <td className="py-2 pr-4 text-ink-soft">{s.bank_accounts?.display_name}</td>
-                    <td className="num py-2 pr-4 text-ink">{formatCurrency(s.amount)}</td>
-                    <td className="py-2 pr-4 text-xs text-ink-faint">{charges.join(", ") || "—"}</td>
-                    <td className="py-2 pr-4 text-ink-soft">{s.status === "valido" ? "Válida" : "Estornada"}</td>
-                    {canCancel && (
-                      <td className="py-2 pr-4">
-                        {s.status === "valido" && <ReverseSettlementButton settlementId={s.id} />}
-                      </td>
-                    )}
-                    {type === "receita" && (
-                      <td className="py-2 pr-4">
-                        {s.status === "valido" && (
-                          <Link href={`/recibos/novo?settlement=${s.id}`} className="text-sm font-medium text-brand-accent hover:underline">
-                            Emitir recibo
-                          </Link>
-                        )}
-                      </td>
-                    )}
-                  </tr>
-                );
-              })}
-              {(settlements ?? []).length === 0 && (
-                <tr>
-                  <td colSpan={canCancel ? (type === "receita" ? 7 : 6) : (type === "receita" ? 6 : 5)} className="py-4 text-center text-ink-faint">
-                    Nenhuma liquidação registrada.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </Card>
-
-      <Card>
-        <h2 className="mb-4 text-base font-semibold text-ink">Anexos</h2>
-        <AttachmentsPanel
-          entryId={entry.id}
-          organizationId={entry.organization_id}
-          attachments={attachments ?? []}
-          canUpload={canAttach}
-        />
-      </Card>
-
-      {canCancelNow && (
-        <Card>
-          <h2 className="mb-4 text-base font-semibold text-ink">Cancelamento</h2>
-          <p className="mb-3 text-sm text-ink-soft">
-            Só é possível cancelar antes de qualquer pagamento ou recebimento. Lançamentos já
-            liquidados podem ter suas liquidações estornadas individualmente, acima.
-          </p>
-          <CancelForm entryId={entry.id} />
-        </Card>
-      )}
-    </div>
+      <div className="flex gap-2">
+        <SubmitButton />
+        <Button type="button" variant="ghost" onClick={onCancel}>
+          Fechar
+        </Button>
+      </div>
+    </form>
   );
 }
