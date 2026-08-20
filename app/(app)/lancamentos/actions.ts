@@ -8,6 +8,7 @@ import {
   settleSchema,
   cancelSchema,
   reverseSettlementSchema,
+  updateSettlementSchema,
   installmentPlanSchema,
   recurringRuleSchema,
   updateRecurringRuleSchema,
@@ -341,6 +342,95 @@ export async function reverseSettlementFormAction(_prev: FormState, formData: Fo
 
   revalidatePath("/contas-a-pagar");
   revalidatePath("/contas-a-receber");
+  return { success: true };
+}
+
+// ---------------------------------------------------------------------------
+// Editar uma liquidação já registrada (valor, data, conta, encargos etc.).
+//
+// Diferente de editar o lançamento (que só muda o "valor esperado" e não
+// reflete em relatórios de regime de caixa), editar a liquidação corrige o
+// que de fato foi registrado como pago/recebido — por isso reflete em
+// tudo que usa regime de caixa: Fluxo de Caixa Realizado, DRE em regime de
+// caixa, Dashboard. É a forma correta de corrigir um valor errado num
+// lançamento já liquidado, sem precisar estornar e liquidar de novo.
+//
+// Só é permitido em liquidações ainda válidas (não estornadas).
+// ---------------------------------------------------------------------------
+export async function updateSettlementAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  try {
+    await requirePermission("cancelar_lancamentos");
+  } catch {
+    return { error: "Você não tem permissão para editar liquidações." };
+  }
+
+  const parsed = updateSettlementSchema.safeParse({
+    settlement_id: formData.get("settlement_id"),
+    bank_account_id: formData.get("bank_account_id"),
+    settlement_date: formData.get("settlement_date"),
+    amount: formData.get("amount"),
+    payment_method_id: formData.get("payment_method_id") ?? "",
+    interest: formData.get("interest") || "0",
+    penalty: formData.get("penalty") || "0",
+    discount: formData.get("discount") || "0",
+    addition: formData.get("addition") || "0",
+    notes: formData.get("notes") ?? "",
+  });
+
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
+  }
+
+  const { supabase, userId } = await getOrgIdAndUser();
+  const data = parsed.data;
+
+  const { data: current } = await supabase
+    .from("financial_settlements")
+    .select("status, amount, settlement_date, entry_id, financial_entries(type)")
+    .eq("id", data.settlement_id)
+    .single();
+
+  if (!current) {
+    return { error: "Liquidação não encontrada." };
+  }
+  if (current.status !== "valido") {
+    return { error: "Esta liquidação está estornada e não pode ser editada — desfaça o estorno primeiro, se precisar." };
+  }
+
+  const { error } = await supabase
+    .from("financial_settlements")
+    .update({
+      bank_account_id: data.bank_account_id,
+      settlement_date: data.settlement_date,
+      amount: data.amount,
+      payment_method_id: emptyToNull(data.payment_method_id),
+      interest: data.interest ?? 0,
+      penalty: data.penalty ?? 0,
+      discount: data.discount ?? 0,
+      addition: data.addition ?? 0,
+      notes: emptyToNull(data.notes),
+    })
+    .eq("id", data.settlement_id);
+
+  if (error) {
+    return { error: "Não foi possível salvar as alterações da liquidação." };
+  }
+
+  await logAudit({
+    action: "editar",
+    entity: "financial_settlements",
+    entityId: data.settlement_id,
+    previousValue: { valor: current.amount, data: current.settlement_date },
+    newValue: { valor: data.amount, data: data.settlement_date },
+  });
+
+  const type = (current.financial_entries as any)?.type;
+  revalidatePath("/contas-a-pagar");
+  revalidatePath("/contas-a-receber");
+  if (current.entry_id) revalidatePath(`${type === "despesa" ? "/contas-a-pagar" : "/contas-a-receber"}/${current.entry_id}`);
+  revalidatePath("/fluxo-de-caixa/realizado");
+  revalidatePath("/dre");
+  revalidatePath("/dashboard");
   return { success: true };
 }
 
