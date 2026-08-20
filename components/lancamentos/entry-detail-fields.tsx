@@ -29,6 +29,7 @@ export function EntryDetailFields({
   displayValues,
   remainingBalance,
   canEditNow,
+  hasSettlement,
   categories,
   subcategories,
   costCenters,
@@ -62,6 +63,7 @@ export function EntryDetailFields({
   };
   remainingBalance: number | null;
   canEditNow: boolean;
+  hasSettlement: boolean;
   categories: Option[];
   subcategories: (Option & { category_id: string })[];
   costCenters: Option[];
@@ -81,6 +83,7 @@ export function EntryDetailFields({
         bankAccounts={bankAccounts}
         counterparties={counterparties}
         paymentMethods={paymentMethods}
+        hasSettlement={hasSettlement}
         onCancel={() => setEditing(false)}
       />
     );
