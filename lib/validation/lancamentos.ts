@@ -55,6 +55,19 @@ export const reverseSettlementSchema = z.object({
   reason: z.string().optional().or(z.literal("")),
 });
 
+export const updateSettlementSchema = z.object({
+  settlement_id: z.string().uuid(),
+  bank_account_id: z.string().uuid("Selecione a conta bancária."),
+  settlement_date: z.string().min(1, "Informe a data."),
+  amount: z.coerce.number().positive("Informe um valor maior que zero."),
+  payment_method_id: z.string().uuid().optional().or(z.literal("")),
+  interest: z.coerce.number().min(0).optional(),
+  penalty: z.coerce.number().min(0).optional(),
+  discount: z.coerce.number().min(0).optional(),
+  addition: z.coerce.number().min(0).optional(),
+  notes: z.string().optional().or(z.literal("")),
+});
+
 export const installmentPlanSchema = z
   .object({
     type: z.enum(["receita", "despesa"]),
