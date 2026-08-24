@@ -23,6 +23,7 @@ export async function reconcileWithExistingEntryAction(_prev: FormState, formDat
     bank_transaction_id: formData.get("bank_transaction_id"),
     entry_id: formData.get("entry_id"),
     amount: formData.get("amount") || undefined,
+    mark_as_fully_settled: formData.get("mark_as_fully_settled") === "on",
   });
 
   if (!parsed.success) {
@@ -34,6 +35,7 @@ export async function reconcileWithExistingEntryAction(_prev: FormState, formDat
     p_bank_transaction_id: parsed.data.bank_transaction_id,
     p_entry_id: parsed.data.entry_id,
     p_amount: parsed.data.amount ?? null,
+    p_mark_as_fully_settled: parsed.data.mark_as_fully_settled ?? false,
   });
 
   if (error) {
@@ -44,7 +46,11 @@ export async function reconcileWithExistingEntryAction(_prev: FormState, formDat
     action: "conciliar",
     entity: "bank_transactions",
     entityId: parsed.data.bank_transaction_id,
-    metadata: { modo: "vincular a lançamento existente", lancamento: parsed.data.entry_id },
+    metadata: {
+      modo: "vincular a lançamento existente",
+      lancamento: parsed.data.entry_id,
+      liquidacaoTotalForcada: parsed.data.mark_as_fully_settled ?? false,
+    },
   });
 
   revalidatePath("/conciliacao");
