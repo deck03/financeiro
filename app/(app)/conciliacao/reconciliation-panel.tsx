@@ -78,6 +78,11 @@ export function ReconciliationPanel({
   // subcategorias filtrarem certo assim que o formulário aparece.
   const [selectedCategory, setSelectedCategory] = useState(suggestion?.categoryId ?? "");
   const [selectedEntryId, setSelectedEntryId] = useState("");
+  // Valor digitado no campo "Valor a conciliar" — precisa ser controlado
+  // para comparar com o saldo restante do lançamento escolhido e decidir
+  // se mostra a escolha de liquidação parcial vs. total.
+  const [amountInput, setAmountInput] = useState("");
+  const [settleChoice, setSettleChoice] = useState<"parcial" | "total">("parcial");
 
   if (existingState.success || newState.success) {
     return <span className="text-xs text-ink-faint">Conciliada</span>;
@@ -112,14 +117,28 @@ export function ReconciliationPanel({
   if (mode === "existing") {
     const filteredEntries = openEntries;
     const selected = filteredEntries.find((e) => e.id === selectedEntryId);
+
+    // Valor que de fato vai ser considerado se o campo "Valor a conciliar"
+    // ficar em branco (mesma regra usada no servidor: usa o valor da
+    // própria transação bancária).
+    const effectiveAmount = amountInput !== "" ? Number(amountInput) : Math.abs(amount);
+    // Diferença de 1 centavo é tolerada (arredondamento) — só considera
+    // "valor diferente" acima disso.
+    const amountDiffers =
+      selected !== undefined && !Number.isNaN(effectiveAmount) && Math.abs(effectiveAmount - selected.remaining) > 0.01;
+
     return (
       <form action={existingAction} className="space-y-2 rounded-card border border-base-border bg-base-bg p-3">
         <input type="hidden" name="bank_transaction_id" value={bankTransactionId} />
+        <input type="hidden" name="mark_as_fully_settled" value={amountDiffers && settleChoice === "total" ? "on" : ""} />
         <Select
           name="entry_id"
           required
           value={selectedEntryId}
-          onChange={(e) => setSelectedEntryId(e.target.value)}
+          onChange={(e) => {
+            setSelectedEntryId(e.target.value);
+            setSettleChoice("parcial");
+          }}
         >
           <option value="" disabled>
             Selecione o lançamento em aberto
@@ -150,8 +169,56 @@ export function ReconciliationPanel({
           <Label htmlFor={`amount-${bankTransactionId}`}>
             Valor a conciliar (deixe em branco para usar {formatCurrency(Math.abs(amount))})
           </Label>
-          <Input id={`amount-${bankTransactionId}`} name="amount" type="number" step="0.01" min="0.01" />
+          <Input
+            id={`amount-${bankTransactionId}`}
+            name="amount"
+            type="number"
+            step="0.01"
+            min="0.01"
+            value={amountInput}
+            onChange={(e) => setAmountInput(e.target.value)}
+          />
         </div>
+
+        {amountDiffers && selected && (
+          <div className="rounded-card border border-brand-accent/40 bg-brand-accentSoft p-3 text-sm">
+            <p className="text-ink">
+              O valor ({formatCurrency(effectiveAmount)}) é diferente do saldo restante deste lançamento (
+              {formatCurrency(selected.remaining)}). Comum quando o valor de uma conta recorrente varia um pouco a
+              cada mês. Como você quer tratar isso?
+            </p>
+            <div className="mt-2 space-y-1.5">
+              <label className="flex items-start gap-2">
+                <input
+                  type="radio"
+                  name="_settle_choice_ui"
+                  checked={settleChoice === "parcial"}
+                  onChange={() => setSettleChoice("parcial")}
+                  className="mt-0.5"
+                />
+                <span className="text-ink">
+                  <span className="font-medium">Liquidação parcial</span> — grava exatamente{" "}
+                  {formatCurrency(effectiveAmount)}; o lançamento fica em aberto pela diferença.
+                </span>
+              </label>
+              <label className="flex items-start gap-2">
+                <input
+                  type="radio"
+                  name="_settle_choice_ui"
+                  checked={settleChoice === "total"}
+                  onChange={() => setSettleChoice("total")}
+                  className="mt-0.5"
+                />
+                <span className="text-ink">
+                  <span className="font-medium">Considerar totalmente liquidado</span> — fecha o lançamento por
+                  completo, mesmo com o valor diferente. O valor real da transação bancária continua registrado no
+                  extrato, para conferência.
+                </span>
+              </label>
+            </div>
+          </div>
+        )}
+
         {existingState.error && <p className="text-xs text-signal-negative">{existingState.error}</p>}
         <div className="flex gap-2">
           <SubmitButton label="Vincular" />
