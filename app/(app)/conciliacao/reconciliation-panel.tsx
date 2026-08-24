@@ -22,6 +22,17 @@ function formatDate(value: string | null | undefined) {
   return `${day}/${month}/${year}`;
 }
 
+/**
+ * Converte o texto digitado num número, aceitando tanto ponto quanto
+ * vírgula como separador decimal — o campo é type="number", que em tese
+ * só deveria devolver ponto, mas alguns navegadores/configurações de
+ * teclado (ex.: teclado numérico em pt-BR) deixam passar vírgula, e
+ * Number("331,54") vira NaN silenciosamente sem isso.
+ */
+function parseAmount(raw: string): number {
+  return Number(raw.replace(",", "."));
+}
+
 const initialState: FormState = {};
 
 function SubmitButton({ label }: { label: string }) {
@@ -83,6 +94,11 @@ export function ReconciliationPanel({
   // se mostra a escolha de liquidação parcial vs. total.
   const [amountInput, setAmountInput] = useState("");
   const [settleChoice, setSettleChoice] = useState<"parcial" | "total">("parcial");
+  // Resgate: se o servidor recusar por "valor maior que o saldo" (o campo
+  // de comparação no navegador pode falhar por algum motivo — ex.: uma
+  // vírgula digitada onde o número não reconhece), oferece resolver na
+  // hora sem precisar preencher tudo de novo.
+  const [forceRetry, setForceRetry] = useState(false);
 
   if (existingState.success || newState.success) {
     return <span className="text-xs text-ink-faint">Conciliada</span>;
@@ -121,16 +137,22 @@ export function ReconciliationPanel({
     // Valor que de fato vai ser considerado se o campo "Valor a conciliar"
     // ficar em branco (mesma regra usada no servidor: usa o valor da
     // própria transação bancária).
-    const effectiveAmount = amountInput !== "" ? Number(amountInput) : Math.abs(amount);
+    const effectiveAmount = amountInput !== "" ? parseAmount(amountInput) : Math.abs(amount);
     // Diferença de 1 centavo é tolerada (arredondamento) — só considera
     // "valor diferente" acima disso.
     const amountDiffers =
       selected !== undefined && !Number.isNaN(effectiveAmount) && Math.abs(effectiveAmount - selected.remaining) > 0.01;
 
+    const serverRejectedForExceedingBalance = !!existingState.error?.includes("maior que o saldo");
+
     return (
       <form action={existingAction} className="space-y-2 rounded-card border border-base-border bg-base-bg p-3">
         <input type="hidden" name="bank_transaction_id" value={bankTransactionId} />
-        <input type="hidden" name="mark_as_fully_settled" value={amountDiffers && settleChoice === "total" ? "on" : ""} />
+        <input
+          type="hidden"
+          name="mark_as_fully_settled"
+          value={(amountDiffers && settleChoice === "total") || forceRetry ? "on" : ""}
+        />
         <Select
           name="entry_id"
           required
@@ -138,6 +160,7 @@ export function ReconciliationPanel({
           onChange={(e) => {
             setSelectedEntryId(e.target.value);
             setSettleChoice("parcial");
+            setForceRetry(false);
           }}
         >
           <option value="" disabled>
@@ -176,11 +199,14 @@ export function ReconciliationPanel({
             step="0.01"
             min="0.01"
             value={amountInput}
-            onChange={(e) => setAmountInput(e.target.value)}
+            onChange={(e) => {
+              setAmountInput(e.target.value);
+              setForceRetry(false);
+            }}
           />
         </div>
 
-        {amountDiffers && selected && (
+        {amountDiffers && selected && !forceRetry && (
           <div className="rounded-card border border-brand-accent/40 bg-brand-accentSoft p-3 text-sm">
             <p className="text-ink">
               O valor ({formatCurrency(effectiveAmount)}) é diferente do saldo restante deste lançamento (
@@ -219,7 +245,26 @@ export function ReconciliationPanel({
           </div>
         )}
 
-        {existingState.error && <p className="text-xs text-signal-negative">{existingState.error}</p>}
+        {existingState.error && (
+          <div>
+            <p className="text-xs text-signal-negative">{existingState.error}</p>
+            {serverRejectedForExceedingBalance && !forceRetry && (
+              <button
+                type="button"
+                onClick={() => setForceRetry(true)}
+                className="mt-1 text-xs font-medium text-brand-accent hover:underline"
+              >
+                Considerar totalmente liquidado mesmo assim, e tentar de novo
+              </button>
+            )}
+            {forceRetry && (
+              <p className="mt-1 text-xs text-ink-soft">
+                Ao clicar em &quot;Vincular&quot; agora, o lançamento será fechado por completo com o saldo
+                restante, mesmo com a diferença de valor.
+              </p>
+            )}
+          </div>
+        )}
         <div className="flex gap-2">
           <SubmitButton label="Vincular" />
           <Button type="button" variant="ghost" onClick={() => setMode("closed")}>
