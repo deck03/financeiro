@@ -22,6 +22,12 @@ export const reconcileExistingSchema = z.object({
   bank_transaction_id: z.string().uuid(),
   entry_id: z.string().uuid("Selecione o lançamento."),
   amount: z.coerce.number().positive().optional(),
+  // Quando o valor não bate com o saldo restante do lançamento, o operador
+  // escolhe: liquidação parcial (padrão — grava exatamente o valor
+  // informado, o restante fica em aberto) ou considerar totalmente
+  // liquidado (fecha o lançamento mesmo com valor diferente — comum em
+  // recorrências cujo valor varia um pouco a cada mês).
+  mark_as_fully_settled: z.coerce.boolean().optional(),
 });
 
 export const reconcileNewEntrySchema = z.object({
