@@ -386,7 +386,7 @@ export async function updateSettlementAction(_prev: FormState, formData: FormDat
 
   const { data: current } = await supabase
     .from("financial_settlements")
-    .select("status, amount, settlement_date, entry_id, financial_entries(type)")
+    .select("status, amount, settlement_date, entry_id, financial_entries(type, status)")
     .eq("id", data.settlement_id)
     .single();
 
@@ -416,6 +416,32 @@ export async function updateSettlementAction(_prev: FormState, formData: FormDat
     return { error: "Não foi possível salvar as alterações da liquidação." };
   }
 
+  const entryInfo = current.financial_entries as unknown as { type: string; status: string } | null;
+
+  // Quando o lançamento já está totalmente fechado (pago/recebido), editar
+  // uma liquidação também corrige o valor do lançamento — para refletir
+  // certo na DRE em regime de competência, não só no caixa (mesma lógica
+  // já aplicada em "considerar totalmente liquidado" na conciliação).
+  //
+  // Enquanto o lançamento ainda estiver parcialmente pago/recebido (ou em
+  // qualquer outro status não fechado), o valor do lançamento NÃO é
+  // tocado — ele continua representando o total esperado, e o restante
+  // ainda em aberto continua fazendo sentido.
+  if (entryInfo && (entryInfo.status === "pago" || entryInfo.status === "recebido")) {
+    const { data: validSettlements } = await supabase
+      .from("financial_settlements")
+      .select("amount")
+      .eq("entry_id", current.entry_id)
+      .eq("status", "valido");
+
+    const settledSum = (validSettlements ?? []).reduce((sum, s) => sum + Number(s.amount), 0);
+
+    await supabase
+      .from("financial_entries")
+      .update({ original_amount: settledSum, updated_by: userId })
+      .eq("id", current.entry_id);
+  }
+
   await logAudit({
     action: "editar",
     entity: "financial_settlements",
@@ -424,7 +450,7 @@ export async function updateSettlementAction(_prev: FormState, formData: FormDat
     newValue: { valor: data.amount, data: data.settlement_date },
   });
 
-  const type = (current.financial_entries as any)?.type;
+  const type = entryInfo?.type;
   revalidatePath("/contas-a-pagar");
   revalidatePath("/contas-a-receber");
   if (current.entry_id) revalidatePath(`${type === "despesa" ? "/contas-a-pagar" : "/contas-a-receber"}/${current.entry_id}`);
