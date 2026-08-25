@@ -32,22 +32,42 @@ export function EntriesTable({
           </tr>
         </thead>
         <tbody>
-          {entries.map((e) => (
-            <tr key={e.id} className="border-b border-base-border last:border-0 hover:bg-base-bg">
-              <td className="py-2 pr-4">
-                <Link href={`${basePath}/${e.id}`} className="text-ink hover:text-brand-accent hover:underline">
-                  {e.description}
-                </Link>
-              </td>
-              <td className="py-2 pr-4 text-ink-soft">{e.counterparties?.name ?? "—"}</td>
-              <td className="py-2 pr-4 text-ink-soft">{e.chart_account_categories?.name ?? "—"}</td>
-              <td className="py-2 pr-4 text-ink-soft">{formatDate(e.due_date)}</td>
-              <td className="num py-2 pr-4 text-ink">{formatCurrency(e.original_amount)}</td>
-              <td className="py-2 pr-4">
-                <EntryStatusBadge status={e.status} dueDate={e.due_date} />
-              </td>
-            </tr>
-          ))}
+          {entries.map((e) => {
+            // display_amount (soma das liquidações válidas) é calculado na
+            // página. Uma vez que exista liquidação, a coluna mostra o
+            // valor realmente pago/recebido — não o valor esperado do
+            // lançamento — porque os dois podem ser diferentes quando a
+            // conciliação usa "considerar totalmente liquidado" ou quando
+            // o valor bancário simplesmente difere do previsto (ex.: uma
+            // recorrência cujo valor varia a cada mês).
+            const displayAmount = e.display_amount ?? e.original_amount;
+            const differsFromExpected =
+              e.display_amount !== null &&
+              e.display_amount !== undefined &&
+              Math.abs(e.display_amount - e.original_amount) > 0.01;
+
+            return (
+              <tr key={e.id} className="border-b border-base-border last:border-0 hover:bg-base-bg">
+                <td className="py-2 pr-4">
+                  <Link href={`${basePath}/${e.id}`} className="text-ink hover:text-brand-accent hover:underline">
+                    {e.description}
+                  </Link>
+                </td>
+                <td className="py-2 pr-4 text-ink-soft">{e.counterparties?.name ?? "—"}</td>
+                <td className="py-2 pr-4 text-ink-soft">{e.chart_account_categories?.name ?? "—"}</td>
+                <td className="py-2 pr-4 text-ink-soft">{formatDate(e.due_date)}</td>
+                <td className="num py-2 pr-4 text-ink">
+                  {formatCurrency(displayAmount)}
+                  {differsFromExpected && (
+                    <div className="text-xs font-normal text-ink-faint">esperado {formatCurrency(e.original_amount)}</div>
+                  )}
+                </td>
+                <td className="py-2 pr-4">
+                  <EntryStatusBadge status={e.status} dueDate={e.due_date} />
+                </td>
+              </tr>
+            );
+          })}
           {entries.length === 0 && (
             <tr>
               <td colSpan={6} className="py-6 text-center text-ink-faint">
