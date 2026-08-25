@@ -10,6 +10,13 @@ import { ExportButtons } from "@/components/export-buttons";
 
 const OPEN_STATUSES = ["em_aberto", "agendado", "parcialmente_recebido"];
 
+/** Soma das liquidações válidas de um lançamento — null se nunca foi liquidado. */
+function settledSum(entry: { financial_settlements?: { amount: number; status: string }[] }): number | null {
+  const settlements = (entry.financial_settlements ?? []).filter((s) => s.status === "valido");
+  if (settlements.length === 0) return null;
+  return settlements.reduce((sum, s) => sum + Number(s.amount), 0);
+}
+
 export default async function ContasAReceberPage({
   searchParams,
 }: {
@@ -23,7 +30,7 @@ export default async function ContasAReceberPage({
   let query = supabase
     .from("financial_entries")
     .select(
-      "id, description, original_amount, due_date, status, counterparties(name), chart_account_categories(name)"
+      "id, description, original_amount, due_date, status, counterparties(name), chart_account_categories(name), financial_settlements(amount, status)"
     )
     .eq("type", "receita")
     .order("due_date", { ascending: true });
@@ -45,7 +52,10 @@ export default async function ContasAReceberPage({
   // fica de fora aqui, porque o resumo já é uma quebra POR status (em
   // aberto/recebido/vencido simultaneamente); aplicar mais um filtro de
   // status por cima zeraria a maioria dos cartões.
-  let totalsQuery = supabase.from("financial_entries").select("original_amount, status, due_date").eq("type", "receita");
+  let totalsQuery = supabase
+    .from("financial_entries")
+    .select("original_amount, status, due_date, financial_settlements(amount, status)")
+    .eq("type", "receita");
   if (searchParams.q) totalsQuery = totalsQuery.ilike("description", `%${searchParams.q}%`);
   if (searchParams.from) totalsQuery = totalsQuery.gte("due_date", searchParams.from);
   if (searchParams.to) totalsQuery = totalsQuery.lte("due_date", searchParams.to);
@@ -67,12 +77,20 @@ export default async function ContasAReceberPage({
       supabase.from("counterparties").select("id, name").eq("status", "ativo").order("name"),
     ]);
 
+  // Anexa o valor realmente liquidado a cada lançamento, para a lista
+  // mostrar isso em vez do valor esperado quando já existir liquidação.
+  const entriesWithSettled = (entries ?? []).map((e: any) => ({ ...e, display_amount: settledSum(e) }));
+
   const openTotal = (totalsData ?? [])
     .filter((e) => e.status === "em_aberto" || e.status === "agendado" || e.status === "parcialmente_recebido")
     .reduce((sum, e) => sum + Number(e.original_amount), 0);
+  // "Total recebido" agora soma o que foi de fato liquidado, não o valor
+  // esperado — os dois podem divergir quando a conciliação foi feita com
+  // um valor diferente do lançamento (ex.: "considerar totalmente
+  // liquidado" com uma recorrência de valor variável).
   const receivedTotal = (totalsData ?? [])
-    .filter((e) => e.status === "recebido")
-    .reduce((sum, e) => sum + Number(e.original_amount), 0);
+    .filter((e: any) => e.status === "recebido")
+    .reduce((sum: number, e: any) => sum + (settledSum(e) ?? Number(e.original_amount)), 0);
   const overdueTotal = (totalsData ?? [])
     .filter((e) => OPEN_STATUSES.includes(e.status) && e.due_date < today)
     .reduce((sum, e) => sum + Number(e.original_amount), 0);
@@ -120,7 +138,7 @@ export default async function ContasAReceberPage({
             />
           )}
         </div>
-        <EntriesTable entries={entries ?? []} basePath="/contas-a-receber" />
+        <EntriesTable entries={entriesWithSettled} basePath="/contas-a-receber" />
       </Card>
     </div>
   );
