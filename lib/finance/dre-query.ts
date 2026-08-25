@@ -4,15 +4,23 @@ export type ClassifiedItem = {
   dre_behavior: string;
   managerial_nature: string;
   family_name: string;
+  category_name: string;
+  subcategory_name: string | null;
 };
 
 export type Regime = "caixa" | "competencia";
 
 /**
  * Busca os itens do período já classificados (tipo, comportamento na DRE,
- * natureza gerencial, família) para alimentar buildDRE(). No regime de
- * caixa, usa as liquidações (financial_settlements); no regime de
- * competência, usa os lançamentos diretamente pela data de competência.
+ * natureza gerencial, família, categoria, subcategoria) para alimentar
+ * buildDRE(). No regime de caixa, usa as liquidações (financial_settlements);
+ * no regime de competência, usa os lançamentos diretamente pela data de
+ * competência.
+ *
+ * category_name e subcategory_name foram adicionados para a visão
+ * consolidada da DRE (família → categoria → subcategoria) — os campos
+ * já existentes (dre_behavior, managerial_nature, family_name) continuam
+ * exatamente iguais, para não quebrar nada que já lê este tipo.
  *
  * @param organizationId use apenas quando chamado fora de uma sessão de
  *   usuário autenticado (cliente admin, sem RLS) — ver mesma observação em
@@ -29,7 +37,7 @@ export async function fetchClassifiedItems(
     let query = supabase
       .from("financial_settlements")
       .select(
-        "amount, financial_entries(type, chart_account_categories(dre_behavior, managerial_nature, chart_account_families(name)))"
+        "amount, financial_entries(type, chart_account_categories(name, dre_behavior, managerial_nature, chart_account_families(name)), chart_account_subcategories(name))"
       )
       .eq("status", "valido")
       .gte("settlement_date", from)
@@ -45,12 +53,16 @@ export async function fetchClassifiedItems(
         dre_behavior: s.financial_entries.chart_account_categories?.dre_behavior ?? "nao_incluir",
         managerial_nature: s.financial_entries.chart_account_categories?.managerial_nature ?? "nao_classificada",
         family_name: s.financial_entries.chart_account_categories?.chart_account_families?.name ?? "Sem família",
+        category_name: s.financial_entries.chart_account_categories?.name ?? "Sem categoria",
+        subcategory_name: s.financial_entries.chart_account_subcategories?.name ?? null,
       }));
   }
 
   let query = supabase
     .from("financial_entries")
-    .select("type, original_amount, chart_account_categories(dre_behavior, managerial_nature, chart_account_families(name))")
+    .select(
+      "type, original_amount, chart_account_categories(name, dre_behavior, managerial_nature, chart_account_families(name)), chart_account_subcategories(name)"
+    )
     .gte("competence_date", from)
     .lte("competence_date", to)
     .not("status", "in", "(cancelado,estornado)");
@@ -63,6 +75,8 @@ export async function fetchClassifiedItems(
     dre_behavior: e.chart_account_categories?.dre_behavior ?? "nao_incluir",
     managerial_nature: e.chart_account_categories?.managerial_nature ?? "nao_classificada",
     family_name: e.chart_account_categories?.chart_account_families?.name ?? "Sem família",
+    category_name: e.chart_account_categories?.name ?? "Sem categoria",
+    subcategory_name: e.chart_account_subcategories?.name ?? null,
   }));
 }
 
