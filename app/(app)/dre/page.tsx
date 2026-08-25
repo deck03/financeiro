@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { hasPermission } from "@/lib/permissions";
 import { Card } from "@/components/ui/card";
 import { DreFilter } from "./dre-filter";
+import { DreConsolidatedTree } from "./dre-tree";
 import { buildDRE } from "@/lib/finance/dre";
 import { fetchClassifiedItems, fetchPartnerTransfers, type Regime } from "@/lib/finance/dre-query";
 import { formatCurrency, formatDate, monthRange, quarterRange, toISODate } from "@/lib/finance/period";
@@ -108,13 +109,57 @@ export default async function DrePage({
     return `/dre/detalhe?${p.toString()}`;
   }
 
+  // Alternador "só pagas/recebidas" (regime de caixa) vs. "tudo" (regime
+  // de competência) — reaproveita o parâmetro "regime" que já existe,
+  // preservando o período atual na URL.
+  function regimeHref(newRegime: Regime) {
+    const p = new URLSearchParams();
+    p.set("regime", newRegime);
+    p.set("period", periodType);
+    if (periodType === "trimestral") {
+      p.set("year", String(year));
+      p.set("quarter", String(quarter));
+    } else if (periodType === "personalizado") {
+      p.set("from", from);
+      p.set("to", to);
+    } else {
+      p.set("year", String(year));
+      p.set("month", String(month));
+    }
+    return `/dre?${p.toString()}`;
+  }
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-semibold text-ink">DRE gerencial</h1>
-        <p className="text-sm text-ink-soft">
-          {periodLabel} · {regime === "caixa" ? "Regime de caixa" : "Regime de competência"}
-        </p>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-semibold text-ink">DRE gerencial</h1>
+          <p className="text-sm text-ink-soft">
+            {periodLabel} · {regime === "caixa" ? "Regime de caixa" : "Regime de competência"}
+          </p>
+        </div>
+
+        {/* Alternador simples: ligado = só contas pagas/recebidas (regime
+            de caixa); desligado = considera tudo, inclusive em aberto
+            (regime de competência). */}
+        <div className="inline-flex items-center gap-2 rounded-card border border-base-border bg-base-surface p-1 text-sm">
+          <Link
+            href={regimeHref("caixa")}
+            className={`rounded-card px-3 py-1.5 font-medium transition-colors ${
+              regime === "caixa" ? "bg-brand-accent text-white" : "text-ink-soft hover:text-ink"
+            }`}
+          >
+            Só pagas/recebidas
+          </Link>
+          <Link
+            href={regimeHref("competencia")}
+            className={`rounded-card px-3 py-1.5 font-medium transition-colors ${
+              regime === "competencia" ? "bg-brand-accent text-white" : "text-ink-soft hover:text-ink"
+            }`}
+          >
+            Considerar tudo
+          </Link>
+        </div>
       </div>
 
       <Card>
@@ -143,21 +188,17 @@ export default async function DrePage({
       </Card>
 
       <Card>
-        <DreLine label="Receitas operacionais" value={dre.receitaOperacional} href={detailHref({ type: "receita", dre_behavior: "incluir_operacional" })} />
+        <div className="mb-1">
+          <DreLine label="Receitas operacionais" value={dre.receitaOperacional} bold />
+          <p className="mb-1 pl-2 text-xs text-ink-faint">Clique numa família ou categoria para ver as subcategorias.</p>
+          <DreConsolidatedTree nodes={dre.receitaOperacionalTree} />
+        </div>
 
-        <div className="mt-2">
+        <div className="mt-4">
           <p className="pt-2 text-xs font-medium uppercase tracking-wide text-ink-faint">Despesas operacionais</p>
-          {dre.despesasOperacionaisPorFamilia.map((line) => (
-            <DreLine
-              key={line.key}
-              label={line.label}
-              value={-line.total}
-              indent
-              href={detailHref({ type: "despesa", dre_behavior: "incluir_operacional", family: line.label })}
-            />
-          ))}
-          {dre.despesasOperacionaisPorFamilia.length === 0 && (
-            <p className="pl-4 py-2 text-sm text-ink-faint">Nenhuma despesa operacional no período.</p>
+          <DreConsolidatedTree nodes={dre.despesasOperacionaisTree} negative />
+          {dre.despesasOperacionaisTree.length === 0 && (
+            <p className="pl-2 py-2 text-sm text-ink-faint">Nenhuma despesa operacional no período.</p>
           )}
         </div>
 
