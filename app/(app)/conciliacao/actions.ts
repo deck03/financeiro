@@ -31,12 +31,18 @@ export async function reconcileWithExistingEntryAction(_prev: FormState, formDat
   }
 
   const supabase = await getSupabase();
-  const { error } = await supabase.rpc("reconcile_with_existing_entry", {
+  // O cast abaixo evita que o build quebre se lib/types/database.ts estiver
+  // um passo atrás desta função no banco (o parâmetro novo
+  // p_mark_as_fully_settled não está descrito nos tipos gerados ainda) —
+  // a chamada em si continua funcionando normalmente, só a checagem de
+  // tipo estrita é contornada para este nome de função específico. Mesmo
+  // padrão já usado em deletePendingTransactionsAction.
+  const { error } = (await (supabase.rpc as any)("reconcile_with_existing_entry", {
     p_bank_transaction_id: parsed.data.bank_transaction_id,
     p_entry_id: parsed.data.entry_id,
     p_amount: parsed.data.amount ?? null,
     p_mark_as_fully_settled: parsed.data.mark_as_fully_settled ?? false,
-  });
+  })) as { error: { message: string } | null };
 
   if (error) {
     return { error: error.message.includes("permissão") ? "Você não tem permissão para esta ação." : error.message };
