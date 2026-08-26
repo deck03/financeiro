@@ -5,6 +5,7 @@ import { requirePermission } from "@/lib/permissions";
 import {
   entrySchema,
   updateEntrySchema,
+  updateEntryStatusSchema,
   settleSchema,
   cancelSchema,
   reverseSettlementSchema,
@@ -74,6 +75,7 @@ export async function createEntryAction(_prev: FormState, formData: FormData): P
     already_settled: formData.get("already_settled") === "on",
     settlement_date: formData.get("settlement_date") ?? "",
     settlement_bank_account_id: formData.get("settlement_bank_account_id") ?? "",
+    initial_status: formData.get("initial_status") || undefined,
   });
 
   if (!parsed.success) {
@@ -111,6 +113,12 @@ export async function createEntryAction(_prev: FormState, formData: FormData): P
       due_date: data.due_date,
       document_number: emptyToNull(data.document_number),
       notes: emptyToNull(data.notes),
+      // Se já foi liquidado, o status real vem do settle_entry logo
+      // abaixo — o que gravamos aqui não importa nesse caso. Se ainda não
+      // foi liquidado, respeita o status escolhido no formulário
+      // ("Em aberto" ou "Agendado" — pagamento/recebimento já programado
+      // mas ainda não realizado).
+      status: !data.already_settled && data.initial_status === "agendado" ? "agendado" : "em_aberto",
       created_by: userId,
       updated_by: userId,
     })
@@ -238,6 +246,78 @@ export async function updateEntryAction(_prev: FormState, formData: FormData): P
       vencimento: current.due_date,
     },
     newValue: { descricao: data.description, valor: data.original_amount, vencimento: data.due_date },
+  });
+
+  revalidatePath(current.type === "despesa" ? "/contas-a-pagar" : "/contas-a-receber");
+  revalidatePath(`${current.type === "despesa" ? "/contas-a-pagar" : "/contas-a-receber"}/${data.entry_id}`);
+  return { success: true };
+}
+
+// ---------------------------------------------------------------------------
+// Muda o status de um lançamento diretamente (rascunho / em aberto /
+// agendado) — sem liquidar nem cancelar. Útil para marcar um pagamento já
+// programado (ex.: agendado no banco, mas ainda não debitado) como
+// "Agendado", ou para voltar a "Em aberto" se o agendamento cair.
+//
+// Só transita DENTRO do grupo "ainda não liquidado" (rascunho/em_aberto/
+// agendado) — nunca para pago/recebido/cancelado por aqui. Marcar como
+// pago/recebido exige o fluxo de liquidação de verdade (settle_entry),
+// que gera um registro de liquidação real; cancelar exige cancel_entry.
+// Uma simples troca de status não deveria fingir que algum desses
+// aconteceu.
+// ---------------------------------------------------------------------------
+const OPEN_BUCKET_STATUSES = ["rascunho", "em_aberto", "agendado"];
+
+export async function updateEntryStatusAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  try {
+    await requirePermission("editar_lancamentos_em_aberto");
+  } catch {
+    return { error: "Você não tem permissão para alterar o status de lançamentos." };
+  }
+
+  const parsed = updateEntryStatusSchema.safeParse({
+    entry_id: formData.get("entry_id"),
+    status: formData.get("status"),
+  });
+
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
+  }
+
+  const { supabase, userId } = await getOrgIdAndUser();
+  const data = parsed.data;
+
+  const { data: current } = await supabase
+    .from("financial_entries")
+    .select("status, type")
+    .eq("id", data.entry_id)
+    .single();
+
+  if (!current) {
+    return { error: "Lançamento não encontrado." };
+  }
+  if (!OPEN_BUCKET_STATUSES.includes(current.status)) {
+    return {
+      error:
+        "Este status só pode ser alterado entre rascunho, em aberto e agendado. Para lançamentos já pagos/recebidos, estorne a liquidação primeiro; para cancelados, não é possível reabrir por aqui.",
+    };
+  }
+
+  const { error } = await supabase
+    .from("financial_entries")
+    .update({ status: data.status, updated_by: userId })
+    .eq("id", data.entry_id);
+
+  if (error) {
+    return { error: "Não foi possível alterar o status." };
+  }
+
+  await logAudit({
+    action: "editar",
+    entity: "financial_entries",
+    entityId: data.entry_id,
+    previousValue: { status: current.status },
+    newValue: { status: data.status },
   });
 
   revalidatePath(current.type === "despesa" ? "/contas-a-pagar" : "/contas-a-receber");
