@@ -178,6 +178,7 @@ export async function EntryDetail({ entryId, type }: { entryId: string; type: "r
             bank_account_id: entry.bank_account_id,
             counterparty_id: entry.counterparty_id,
             payment_method_id: entry.payment_method_id,
+            status: entry.status,
           }}
           displayValues={{
             counterparty: (entry.counterparties as any)?.name,
