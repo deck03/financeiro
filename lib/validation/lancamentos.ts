@@ -18,6 +18,10 @@ export const entrySchema = z.object({
   already_settled: z.coerce.boolean().optional(),
   settlement_date: z.string().optional().or(z.literal("")),
   settlement_bank_account_id: z.string().uuid().optional().or(z.literal("")),
+  // Status inicial do lançamento — só faz sentido quando ainda não foi
+  // pago/recebido (already_settled=false). "Agendado" é usado quando o
+  // pagamento/recebimento já está programado, mas ainda não aconteceu.
+  initial_status: z.enum(["em_aberto", "agendado"]).optional(),
 });
 
 export const updateEntrySchema = z.object({
@@ -35,6 +39,19 @@ export const updateEntrySchema = z.object({
   due_date: z.string().min(1, "Informe a data de vencimento."),
   document_number: z.string().optional().or(z.literal("")),
   notes: z.string().optional().or(z.literal("")),
+});
+
+/**
+ * Muda o status de um lançamento diretamente, sem passar por liquidação
+ * nem cancelamento — só entre os três status "em aberto" (rascunho, em
+ * aberto, agendado). Nunca é usado para marcar como pago/recebido/
+ * cancelado — esses continuam exigindo o fluxo próprio (settle_entry /
+ * cancel_entry), que tem efeitos reais (liquidação, log de auditoria
+ * específico etc.) que uma simples troca de status não replicaria.
+ */
+export const updateEntryStatusSchema = z.object({
+  entry_id: z.string().uuid(),
+  status: z.enum(["rascunho", "em_aberto", "agendado"]),
 });
 
 export const settleSchema = z.object({
