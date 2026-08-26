@@ -179,16 +179,27 @@ export function EntryForm({
         )}
 
         {!alreadySettled && (
-          <div className="mt-3">
-            <Label htmlFor="e-bank-account">Conta bancária prevista (opcional)</Label>
-            <Select id="e-bank-account" name="bank_account_id" defaultValue="">
-              <option value="">Ainda não definida</option>
-              {bankAccounts.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.name} {a.ownership === "pessoa_fisica" ? "(pessoal)" : ""}
+          <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div>
+              <Label htmlFor="e-initial-status">Status</Label>
+              <Select id="e-initial-status" name="initial_status" defaultValue="em_aberto">
+                <option value="em_aberto">Em aberto</option>
+                <option value="agendado">
+                  Agendado ({actionLabel} já programado, mas ainda não realizado)
                 </option>
-              ))}
-            </Select>
+              </Select>
+            </div>
+            <div>
+              <Label htmlFor="e-bank-account">Conta bancária prevista (opcional)</Label>
+              <Select id="e-bank-account" name="bank_account_id" defaultValue="">
+                <option value="">Ainda não definida</option>
+                {bankAccounts.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.name} {a.ownership === "pessoa_fisica" ? "(pessoal)" : ""}
+                  </option>
+                ))}
+              </Select>
+            </div>
           </div>
         )}
       </div>
