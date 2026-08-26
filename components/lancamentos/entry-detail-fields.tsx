@@ -1,7 +1,19 @@
 "use client";
 
 import { useState } from "react";
+import { useFormState, useFormStatus } from "react-dom";
 import { EditEntryForm } from "./edit-entry-form";
+import { updateEntryStatusAction, type FormState } from "@/app/(app)/lancamentos/actions";
+import { Select } from "@/components/ui/select";
+
+// Rótulos só para os três status que este seletor manipula — definidos
+// localmente para não depender de um arquivo de labels externo que não
+// foi conferido nesta mudança.
+const OPEN_STATUS_LABELS: Record<string, string> = {
+  rascunho: "Rascunho",
+  em_aberto: "Em aberto",
+  agendado: "Agendado",
+};
 
 type Option = { id: string; name: string };
 
@@ -21,6 +33,42 @@ function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
       <p className="text-xs font-medium uppercase tracking-wide text-ink-faint">{label}</p>
       <p className="mt-0.5 text-sm text-ink">{value ?? "—"}</p>
     </div>
+  );
+}
+
+const OPEN_BUCKET_STATUSES = ["rascunho", "em_aberto", "agendado"];
+const statusInitialState: FormState = {};
+
+/**
+ * Troca o status entre rascunho / em aberto / agendado, sem passar por
+ * liquidação nem cancelamento — só aparece enquanto o lançamento ainda
+ * está nesse grupo "em aberto". Uma vez pago/recebido/cancelado, a
+ * mudança de status exige o fluxo próprio (estornar, editar liquidação
+ * etc.), não esse seletor simples.
+ */
+function StatusChanger({ entryId, currentStatus }: { entryId: string; currentStatus: string }) {
+  const [state, formAction] = useFormState(updateEntryStatusAction, statusInitialState);
+  const { pending } = useFormStatus();
+
+  return (
+    <form action={formAction} className="flex flex-wrap items-center gap-2">
+      <input type="hidden" name="entry_id" value={entryId} />
+      <Select
+        name="status"
+        defaultValue={currentStatus}
+        onChange={(e) => e.target.form?.requestSubmit()}
+        disabled={pending}
+        className="w-40"
+      >
+        {OPEN_BUCKET_STATUSES.map((s) => (
+          <option key={s} value={s}>
+            {OPEN_STATUS_LABELS[s]}
+          </option>
+        ))}
+      </Select>
+      {state.error && <span className="text-xs text-signal-negative">{state.error}</span>}
+      {state.success && <span className="text-xs text-signal-positive">Status atualizado.</span>}
+    </form>
   );
 }
 
@@ -52,6 +100,7 @@ export function EntryDetailFields({
     bank_account_id: string | null;
     counterparty_id: string | null;
     payment_method_id: string | null;
+    status: string;
   };
   displayValues: {
     counterparty?: string;
@@ -91,13 +140,21 @@ export function EntryDetailFields({
 
   return (
     <div>
-      {canEditNow && (
-        <div className="mb-4 flex justify-end">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        {canEditNow && OPEN_BUCKET_STATUSES.includes(entry.status) ? (
+          <div>
+            <p className="mb-1 text-xs font-medium uppercase tracking-wide text-ink-faint">Status</p>
+            <StatusChanger entryId={entry.id} currentStatus={entry.status} />
+          </div>
+        ) : (
+          <span />
+        )}
+        {canEditNow && (
           <button type="button" onClick={() => setEditing(true)} className="text-sm font-medium text-brand-accent hover:underline">
             Editar
           </button>
-        </div>
-      )}
+        )}
+      </div>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <InfoRow label="Contraparte" value={displayValues.counterparty} />
         <InfoRow label="Categoria" value={displayValues.category} />
