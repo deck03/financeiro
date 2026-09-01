@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useFormState, useFormStatus } from "react-dom";
 import { createRecurringRuleAction, type FormState } from "@/app/(app)/lancamentos/actions";
 import { Button } from "@/components/ui/button";
@@ -24,6 +25,7 @@ type Option = { id: string; name: string };
 export function RecurringForm({
   type,
   categories,
+  subcategories,
   costCenters,
   bankAccounts,
   counterparties,
@@ -31,13 +33,17 @@ export function RecurringForm({
 }: {
   type: "receita" | "despesa";
   categories: Option[];
+  subcategories: (Option & { category_id: string })[];
   costCenters: Option[];
   bankAccounts: (Option & { ownership: string })[];
   counterparties: Option[];
   paymentMethods: Option[];
 }) {
   const [state, formAction] = useFormState(createRecurringRuleAction, initialState);
+  const [selectedCategory, setSelectedCategory] = useState("");
   const today = new Date().toISOString().slice(0, 10);
+
+  const filteredSubcategories = subcategories.filter((s) => s.category_id === selectedCategory);
 
   return (
     <form action={formAction} className="space-y-4">
@@ -87,13 +93,30 @@ export function RecurringForm({
 
         <div>
           <Label htmlFor="rr-category">Categoria</Label>
-          <Select id="rr-category" name="category_id" required defaultValue="">
+          <Select
+            id="rr-category"
+            name="category_id"
+            required
+            value={selectedCategory}
+            onChange={(e) => setSelectedCategory(e.target.value)}
+          >
             <option value="" disabled>
               Selecione
             </option>
             {categories.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
+              </option>
+            ))}
+          </Select>
+        </div>
+        <div>
+          <Label htmlFor="rr-subcategory">Subcategoria (opcional)</Label>
+          <Select id="rr-subcategory" name="subcategory_id" defaultValue="" disabled={filteredSubcategories.length === 0}>
+            <option value="">Nenhuma</option>
+            {filteredSubcategories.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
               </option>
             ))}
           </Select>
