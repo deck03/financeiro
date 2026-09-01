@@ -11,6 +11,12 @@ export type MonthlyReportData = {
   initialBalance: number;
   finalBalance: number;
   cashGenerated: number;
+  // A partir desta correção, totalInflows/totalOutflows e tudo que deriva
+  // deles (top 5, agrupamento por categoria) representam só PJ — pessoa
+  // física (dre_behavior = 'nao_incluir', mesma classificação já usada na
+  // DRE e no Fluxo de Caixa Realizado) fica de fora, igual já acontecia
+  // com operatingRevenue/operatingResult. Os totais de PF entram
+  // separados, nos campos pf* abaixo — nunca mais misturados.
   totalInflows: number;
   totalOutflows: number;
   operatingRevenue: number;
@@ -30,6 +36,13 @@ export type MonthlyReportData = {
   revenueByCategory: { name: string; total: number }[];
   unreconciledCount: number;
   appUrl: string;
+  // Movimentações de sócios / pessoa física do período — separadas de
+  // tudo acima, nunca somadas aos números de PJ.
+  pfInflowsTotal: number;
+  pfOutflowsTotal: number;
+  pfNetTotal: number;
+  pfPayableOpenTotal: number;
+  pfReceivableOpenTotal: number;
 };
 
 function toISODate(d: Date) {
@@ -78,16 +91,29 @@ export async function buildMonthlyReportData(supabaseAdmin: any, organizationId:
   );
   const prevDre = buildDRE(prevItems);
 
+  // dre_behavior entra na busca para separar PF de PJ — mesma
+  // classificação já usada na DRE e no Fluxo de Caixa Realizado
+  // ('nao_incluir' = movimentação de sócio/pessoa física, nunca somada
+  // aos números operacionais de PJ).
   const { data: settlements } = await supabaseAdmin
     .from("financial_settlements")
-    .select("amount, settlement_date, financial_entries(type, description, chart_account_categories(name))")
+    .select("amount, settlement_date, financial_entries(type, description, chart_account_categories(name, dre_behavior))")
     .eq("organization_id", organizationId)
     .eq("status", "valido")
     .gte("settlement_date", periodStartISO)
     .lte("settlement_date", periodEndISO);
 
-  const inflows = (settlements ?? []).filter((s: any) => s.financial_entries?.type === "receita");
-  const outflows = (settlements ?? []).filter((s: any) => s.financial_entries?.type === "despesa");
+  function isPF(s: any) {
+    return s.financial_entries?.chart_account_categories?.dre_behavior === "nao_incluir";
+  }
+
+  const allInflows = (settlements ?? []).filter((s: any) => s.financial_entries?.type === "receita");
+  const allOutflows = (settlements ?? []).filter((s: any) => s.financial_entries?.type === "despesa");
+
+  const inflows = allInflows.filter((s: any) => !isPF(s));
+  const outflows = allOutflows.filter((s: any) => !isPF(s));
+  const pfInflows = allInflows.filter(isPF);
+  const pfOutflows = allOutflows.filter(isPF);
 
   function groupByCategory(list: any[]) {
     const map = new Map<string, number>();
@@ -119,16 +145,18 @@ export async function buildMonthlyReportData(supabaseAdmin: any, organizationId:
     organizationId
   );
 
+  // dre_behavior também entra aqui, pelo mesmo motivo — separar o que
+  // ainda está em aberto de PJ do que é PF.
   const [{ data: payables }, { data: receivables }, unreconciledResult] = await Promise.all([
     supabaseAdmin
       .from("financial_entries")
-      .select("original_amount, status, due_date")
+      .select("original_amount, status, due_date, chart_account_categories(dre_behavior)")
       .eq("organization_id", organizationId)
       .eq("type", "despesa")
       .in("status", ["em_aberto", "agendado", "parcialmente_pago"]),
     supabaseAdmin
       .from("financial_entries")
-      .select("original_amount, status, due_date")
+      .select("original_amount, status, due_date, chart_account_categories(dre_behavior)")
       .eq("organization_id", organizationId)
       .eq("type", "receita")
       .in("status", ["em_aberto", "agendado", "parcialmente_recebido"]),
@@ -139,16 +167,33 @@ export async function buildMonthlyReportData(supabaseAdmin: any, organizationId:
       .eq("status", "nao_conciliada"),
   ]);
 
+  function isPFEntry(e: any) {
+    return e.chart_account_categories?.dre_behavior === "nao_incluir";
+  }
+
+  const pjPayables = (payables ?? []).filter((e: any) => !isPFEntry(e));
+  const pjReceivables = (receivables ?? []).filter((e: any) => !isPFEntry(e));
+  const pfPayables = (payables ?? []).filter(isPFEntry);
+  const pfReceivables = (receivables ?? []).filter(isPFEntry);
+
   const todayISO = toISODate(today);
-  const overduePayables = (payables ?? []).filter((e: any) => e.due_date < todayISO);
-  const overdueReceivables = (receivables ?? []).filter((e: any) => e.due_date < todayISO);
-  const payableOpenTotal = (payables ?? []).reduce((sum: number, e: any) => sum + Number(e.original_amount), 0);
-  const receivableOpenTotal = (receivables ?? []).reduce((sum: number, e: any) => sum + Number(e.original_amount), 0);
+  // Vencidos continuam olhando só PJ — o mesmo raciocínio de "separar 100%"
+  // vale aqui: uma pendência de PF não deveria aparecer misturada no
+  // alerta de vencidos do negócio.
+  const overduePayables = pjPayables.filter((e: any) => e.due_date < todayISO);
+  const overdueReceivables = pjReceivables.filter((e: any) => e.due_date < todayISO);
+  const payableOpenTotal = pjPayables.reduce((sum: number, e: any) => sum + Number(e.original_amount), 0);
+  const receivableOpenTotal = pjReceivables.reduce((sum: number, e: any) => sum + Number(e.original_amount), 0);
+  const pfPayableOpenTotal = pfPayables.reduce((sum: number, e: any) => sum + Number(e.original_amount), 0);
+  const pfReceivableOpenTotal = pfReceivables.reduce((sum: number, e: any) => sum + Number(e.original_amount), 0);
 
   const monthNames = [
     "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
     "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
   ];
+
+  const pfInflowsTotal = pfInflows.reduce((sum: number, s: any) => sum + Number(s.amount), 0);
+  const pfOutflowsTotal = pfOutflows.reduce((sum: number, s: any) => sum + Number(s.amount), 0);
 
   return {
     organizationName: organization?.name ?? "DECK 03",
@@ -177,5 +222,10 @@ export async function buildMonthlyReportData(supabaseAdmin: any, organizationId:
     revenueByCategory: groupByCategory(inflows),
     unreconciledCount: unreconciledResult.count ?? 0,
     appUrl: process.env.NEXT_PUBLIC_APP_URL ?? "",
+    pfInflowsTotal,
+    pfOutflowsTotal,
+    pfNetTotal: pfInflowsTotal - pfOutflowsTotal,
+    pfPayableOpenTotal,
+    pfReceivableOpenTotal,
   };
 }
