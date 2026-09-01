@@ -20,12 +20,24 @@ function settledSum(entry: { financial_settlements?: { amount: number; status: s
 export default async function ContasAReceberPage({
   searchParams,
 }: {
-  searchParams: { q?: string; status?: string; from?: string; to?: string; category_id?: string; subcategory_id?: string; counterparty_id?: string };
+  searchParams: { q?: string; status?: string; from?: string; to?: string; category_id?: string; subcategory_id?: string; counterparty_id?: string; all?: string };
 }) {
   const supabase = createClient();
   const canCreate = await hasPermission("criar_lancamentos");
   const canExport = await hasPermission("exportar_relatorios");
   const today = new Date().toISOString().slice(0, 10);
+
+  // Ao abrir a tela sem nenhum filtro de período na URL (primeira visita,
+  // ou voltando do menu), já filtra por hoje — em vez de mostrar todo o
+  // histórico de uma vez. Se o usuário limpar o período de propósito
+  // (botão "Limpar período"), o marcador "all=1" evita que esse padrão
+  // volte a ser aplicado sozinho.
+  let from: string | undefined = searchParams.from;
+  let to: string | undefined = searchParams.to;
+  if (!from && !to && searchParams.all !== "1") {
+    from = today;
+    to = today;
+  }
 
   let query = supabase
     .from("financial_entries")
@@ -36,8 +48,8 @@ export default async function ContasAReceberPage({
     .order("due_date", { ascending: true });
 
   if (searchParams.q) query = query.ilike("description", `%${searchParams.q}%`);
-  if (searchParams.from) query = query.gte("due_date", searchParams.from);
-  if (searchParams.to) query = query.lte("due_date", searchParams.to);
+  if (from) query = query.gte("due_date", from);
+  if (to) query = query.lte("due_date", to);
   if (searchParams.category_id) query = query.eq("category_id", searchParams.category_id);
   if (searchParams.subcategory_id) query = query.eq("subcategory_id", searchParams.subcategory_id);
   if (searchParams.counterparty_id) query = query.eq("counterparty_id", searchParams.counterparty_id);
@@ -57,8 +69,8 @@ export default async function ContasAReceberPage({
     .select("original_amount, status, due_date, financial_settlements(amount, status)")
     .eq("type", "receita");
   if (searchParams.q) totalsQuery = totalsQuery.ilike("description", `%${searchParams.q}%`);
-  if (searchParams.from) totalsQuery = totalsQuery.gte("due_date", searchParams.from);
-  if (searchParams.to) totalsQuery = totalsQuery.lte("due_date", searchParams.to);
+  if (from) totalsQuery = totalsQuery.gte("due_date", from);
+  if (to) totalsQuery = totalsQuery.lte("due_date", to);
   if (searchParams.category_id) totalsQuery = totalsQuery.eq("category_id", searchParams.category_id);
   if (searchParams.subcategory_id) totalsQuery = totalsQuery.eq("subcategory_id", searchParams.subcategory_id);
   if (searchParams.counterparty_id) totalsQuery = totalsQuery.eq("counterparty_id", searchParams.counterparty_id);
@@ -125,8 +137,8 @@ export default async function ContasAReceberPage({
                 const qs = new URLSearchParams({ type: "receita" });
                 if (searchParams.q) qs.set("q", searchParams.q);
                 if (searchParams.status) qs.set("status", searchParams.status);
-                if (searchParams.from) qs.set("from", searchParams.from);
-                if (searchParams.to) qs.set("to", searchParams.to);
+                if (from) qs.set("from", from);
+                if (to) qs.set("to", to);
                 if (searchParams.category_id) qs.set("category_id", searchParams.category_id);
                 if (searchParams.subcategory_id) qs.set("subcategory_id", searchParams.subcategory_id);
                 if (searchParams.counterparty_id) qs.set("counterparty_id", searchParams.counterparty_id);
