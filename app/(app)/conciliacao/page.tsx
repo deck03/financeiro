@@ -32,12 +32,20 @@ export default async function ConciliacaoPage({
     .eq("status", "ativa")
     .order("display_name");
 
-  const accountId = searchParams.account || accounts?.[0]?.id || "";
+  // A conciliação sempre considera a conta C6 - DECK — não existe mais
+  // seletor de conta na tela. Se o nome mudar no cadastro (Contas
+  // bancárias), essa busca por nome deixa de encontrar a conta; nesse
+  // caso, ajuste o nome abaixo para bater com o cadastro atual.
+  const defaultAccount = (accounts ?? []).find((a) => a.display_name === "C6 - DECK") ?? (accounts ?? [])[0];
+  const accountId = searchParams.account || defaultAccount?.id || "";
 
   if (!accountId) {
     return (
       <Card>
-        <p className="text-sm text-ink-faint">Nenhuma conta bancária cadastrada.</p>
+        <p className="text-sm text-ink-faint">
+          Nenhuma conta bancária ativa encontrada (esperava encontrar "C6 - DECK" em Contas
+          bancárias).
+        </p>
       </Card>
     );
   }
@@ -142,22 +150,8 @@ export default async function ConciliacaoPage({
       </div>
 
       <Card>
-        <div className="flex flex-wrap gap-2">
-          {(accounts ?? []).map((a) => (
-            <Link
-              key={a.id}
-              href={`/conciliacao?account=${a.id}`}
-              className={`rounded-card border px-3 py-1.5 text-sm font-medium ${
-                a.id === accountId
-                  ? "border-brand-accent bg-brand-accentSoft text-brand-accent"
-                  : "border-base-border bg-white text-ink-soft hover:bg-base-bg"
-              }`}
-            >
-              {a.display_name}
-            </Link>
-          ))}
-        </div>
-        <p className="mt-3 text-xs text-ink-faint">
+        <p className="text-sm font-medium text-ink">{defaultAccount?.display_name ?? "C6 - DECK"}</p>
+        <p className="mt-1 text-xs text-ink-faint">
           Para comparar o saldo calculado com o saldo do extrato bancário, use a "Conferência de
           saldo" na página de detalhe da conta em Contas Bancárias.
         </p>
