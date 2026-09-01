@@ -28,8 +28,16 @@ export function EntryFilters({
   const [isPending, startTransition] = useTransition();
 
   const [search, setSearch] = useState(searchParams.get("q") ?? "");
-  const [from, setFrom] = useState(searchParams.get("from") ?? "");
-  const [to, setTo] = useState(searchParams.get("to") ?? "");
+  // Mesmo padrão aplicado na página: sem nenhum período na URL (e sem o
+  // usuário ter pedido explicitamente para ver tudo), os campos já vêm
+  // preenchidos com a data de hoje — para bater com o que a lista está
+  // de fato mostrando, e não parecer vazio por engano.
+  const today = new Date().toISOString().slice(0, 10);
+  const noDateFilterRequested = searchParams.get("all") === "1";
+  const defaultDate = (paramName: "from" | "to", otherParamName: "from" | "to") =>
+    searchParams.get(paramName) ?? (!searchParams.get(otherParamName) && !noDateFilterRequested ? today : "");
+  const [from, setFrom] = useState(defaultDate("from", "to"));
+  const [to, setTo] = useState(defaultDate("to", "from"));
 
   const selectedCategory = searchParams.get("category_id") ?? "";
   const filteredSubcategories = selectedCategory
@@ -70,6 +78,10 @@ export function EntryFilters({
     else params.delete("from");
     if (to) params.set("to", to);
     else params.delete("to");
+    // Definir um período manualmente (mesmo vazio) deixa de ser "sem
+    // período pedido pelo usuário" — remove o marcador de "ver tudo" se
+    // ele estivesse presente de uma limpeza anterior.
+    if (from || to) params.delete("all");
     startTransition(() => {
       router.push(`${pathname}?${params.toString()}`);
     });
@@ -81,6 +93,11 @@ export function EntryFilters({
     const params = new URLSearchParams(searchParams.toString());
     params.delete("from");
     params.delete("to");
+    // Sinaliza que o período foi limpo de propósito — sem isso, a tela
+    // reaplicaria o filtro padrão de "hoje" assim que a página recarregar
+    // (já que, sem essa marca, "nenhum período na URL" é interpretado como
+    // "primeira visita", e cai no padrão de hoje de novo).
+    params.set("all", "1");
     startTransition(() => {
       router.push(`${pathname}?${params.toString()}`);
     });
