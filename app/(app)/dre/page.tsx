@@ -191,12 +191,12 @@ export default async function DrePage({
         <div className="mb-1">
           <DreLine label="Receitas operacionais" value={dre.receitaOperacional} bold />
           <p className="mb-1 pl-2 text-xs text-ink-faint">Clique numa família ou categoria para ver as subcategorias.</p>
-          <DreConsolidatedTree nodes={dre.receitaOperacionalTree} />
+          <DreConsolidatedTree nodes={dre.receitaOperacionalTree} regime={regime} from={from} to={to} type="receita" />
         </div>
 
         <div className="mt-4">
           <p className="pt-2 text-xs font-medium uppercase tracking-wide text-ink-faint">Despesas operacionais</p>
-          <DreConsolidatedTree nodes={dre.despesasOperacionaisTree} negative />
+          <DreConsolidatedTree nodes={dre.despesasOperacionaisTree} negative regime={regime} from={from} to={to} type="despesa" />
           {dre.despesasOperacionaisTree.length === 0 && (
             <p className="pl-2 py-2 text-sm text-ink-faint">Nenhuma despesa operacional no período.</p>
           )}
