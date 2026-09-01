@@ -27,17 +27,23 @@ export default async function ContasAPagarPage({
   const canExport = await hasPermission("exportar_relatorios");
   const today = new Date().toISOString().slice(0, 10);
 
-  // Ao abrir a tela sem nenhum filtro de período na URL (primeira visita,
-  // ou voltando do menu), já filtra por hoje — em vez de mostrar todo o
-  // histórico de uma vez. Se o usuário limpar o período de propósito
-  // (botão "Limpar período"), o marcador "all=1" evita que esse padrão
-  // volte a ser aplicado sozinho.
+  // Sem NENHUM filtro na URL (primeira visita, ou voltando do menu), a
+  // ideia é o operador abrir a tela e já saber tudo que precisa de
+  // atenção hoje — não só o que vence exatamente hoje, mas também o que
+  // já venceu e ainda está em aberto. O marcador "all=1" (do link "Ver
+  // todos os lançamentos") desliga esse padrão de propósito.
+  const noFiltersAtAll =
+    !searchParams.q &&
+    !searchParams.status &&
+    !searchParams.from &&
+    !searchParams.to &&
+    !searchParams.category_id &&
+    !searchParams.subcategory_id &&
+    !searchParams.counterparty_id &&
+    searchParams.all !== "1";
+
   let from: string | undefined = searchParams.from;
   let to: string | undefined = searchParams.to;
-  if (!from && !to && searchParams.all !== "1") {
-    from = today;
-    to = today;
-  }
 
   let query = supabase
     .from("financial_entries")
@@ -47,16 +53,22 @@ export default async function ContasAPagarPage({
     .eq("type", "despesa")
     .order("due_date", { ascending: true });
 
-  if (searchParams.q) query = query.ilike("description", `%${searchParams.q}%`);
-  if (from) query = query.gte("due_date", from);
-  if (to) query = query.lte("due_date", to);
-  if (searchParams.category_id) query = query.eq("category_id", searchParams.category_id);
-  if (searchParams.subcategory_id) query = query.eq("subcategory_id", searchParams.subcategory_id);
-  if (searchParams.counterparty_id) query = query.eq("counterparty_id", searchParams.counterparty_id);
-  if (searchParams.status === "vencido") {
-    query = query.in("status", OPEN_STATUSES).lt("due_date", today);
-  } else if (searchParams.status) {
-    query = query.eq("status", searchParams.status);
+  if (noFiltersAtAll) {
+    // Vencidas e em aberto até hoje — inclui o que já passou do prazo,
+    // não só o que vence exatamente hoje.
+    query = query.in("status", OPEN_STATUSES).lte("due_date", today);
+  } else {
+    if (searchParams.q) query = query.ilike("description", `%${searchParams.q}%`);
+    if (from) query = query.gte("due_date", from);
+    if (to) query = query.lte("due_date", to);
+    if (searchParams.category_id) query = query.eq("category_id", searchParams.category_id);
+    if (searchParams.subcategory_id) query = query.eq("subcategory_id", searchParams.subcategory_id);
+    if (searchParams.counterparty_id) query = query.eq("counterparty_id", searchParams.counterparty_id);
+    if (searchParams.status === "vencido") {
+      query = query.in("status", OPEN_STATUSES).lt("due_date", today);
+    } else if (searchParams.status) {
+      query = query.eq("status", searchParams.status);
+    }
   }
 
   // O resumo do topo respeita os mesmos filtros de busca/categoria/
@@ -68,12 +80,20 @@ export default async function ContasAPagarPage({
     .from("financial_entries")
     .select("original_amount, status, due_date, financial_settlements(amount, status)")
     .eq("type", "despesa");
-  if (searchParams.q) totalsQuery = totalsQuery.ilike("description", `%${searchParams.q}%`);
-  if (from) totalsQuery = totalsQuery.gte("due_date", from);
-  if (to) totalsQuery = totalsQuery.lte("due_date", to);
-  if (searchParams.category_id) totalsQuery = totalsQuery.eq("category_id", searchParams.category_id);
-  if (searchParams.subcategory_id) totalsQuery = totalsQuery.eq("subcategory_id", searchParams.subcategory_id);
-  if (searchParams.counterparty_id) totalsQuery = totalsQuery.eq("counterparty_id", searchParams.counterparty_id);
+  if (noFiltersAtAll) {
+    // Os cartões do topo acompanham a mesma janela da lista (até hoje),
+    // mas continuam mostrando a quebra por status normalmente — não só
+    // "em aberto", para o operador ainda ver quanto já foi pago/recebido
+    // do que vencia até hoje.
+    totalsQuery = totalsQuery.lte("due_date", today);
+  } else {
+    if (searchParams.q) totalsQuery = totalsQuery.ilike("description", `%${searchParams.q}%`);
+    if (from) totalsQuery = totalsQuery.gte("due_date", from);
+    if (to) totalsQuery = totalsQuery.lte("due_date", to);
+    if (searchParams.category_id) totalsQuery = totalsQuery.eq("category_id", searchParams.category_id);
+    if (searchParams.subcategory_id) totalsQuery = totalsQuery.eq("subcategory_id", searchParams.subcategory_id);
+    if (searchParams.counterparty_id) totalsQuery = totalsQuery.eq("counterparty_id", searchParams.counterparty_id);
+  }
 
   const [{ data: entries }, { data: totalsData }, { data: categories }, { data: subcategories }, { data: counterparties }] =
     await Promise.all([
@@ -122,6 +142,15 @@ export default async function ContasAPagarPage({
       </div>
 
       <EntryTotals openTotal={openTotal} settledTotal={paidTotal} settledLabel="Total pago" overdueTotal={overdueTotal} />
+
+      {noFiltersAtAll && (
+        <p className="text-sm text-ink-soft">
+          Mostrando contas vencidas e em aberto até hoje.{" "}
+          <a href="/contas-a-pagar?all=1" className="font-medium text-brand-accent hover:underline">
+            Ver todos os lançamentos
+          </a>
+        </p>
+      )}
 
       <Card>
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
