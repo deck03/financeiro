@@ -33,10 +33,23 @@ export default async function ConciliacaoPage({
     .order("display_name");
 
   // A conciliação sempre considera a conta C6 - DECK — não existe mais
-  // seletor de conta na tela. Se o nome mudar no cadastro (Contas
-  // bancárias), essa busca por nome deixa de encontrar a conta; nesse
-  // caso, ajuste o nome abaixo para bater com o cadastro atual.
-  const defaultAccount = (accounts ?? []).find((a) => a.display_name === "C6 - DECK") ?? (accounts ?? [])[0];
+  // seletor de conta na tela. A comparação ignora diferenças de espaço e
+  // de tipo de traço (hífen "-" vs travessão "–"/"—") — o cadastro pode
+  // usar qualquer um deles sem quebrar essa busca. Se o NOME em si mudar
+  // no cadastro (Contas bancárias), essa busca deixa de encontrar a
+  // conta; nesse caso, ajuste o nome abaixo para bater com o cadastro
+  // atual (é só o texto dentro de normalize(""), não precisa mexer na
+  // função normalize).
+  function normalizeAccountName(value: string) {
+    return value
+      .toUpperCase()
+      .replace(/[\u2010-\u2015]/g, "-") // qualquer tipo de traço vira hífen comum
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+  const defaultAccount =
+    (accounts ?? []).find((a) => normalizeAccountName(a.display_name) === normalizeAccountName("C6 - DECK")) ??
+    (accounts ?? [])[0];
   const accountId = searchParams.account || defaultAccount?.id || "";
 
   if (!accountId) {
