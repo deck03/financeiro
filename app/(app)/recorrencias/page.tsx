@@ -48,6 +48,12 @@ export default async function RecorrenciasPage({
     })
   );
 
+  // Separadas em duas listas — despesas e receitas ficavam misturadas
+  // numa lista só, dificultando achar uma recorrência específica quando
+  // há várias de cada tipo.
+  const despesas = rulesWithEntries.filter((r) => r.type === "despesa");
+  const receitas = rulesWithEntries.filter((r) => r.type === "receita");
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -84,30 +90,66 @@ export default async function RecorrenciasPage({
         </div>
       )}
 
-      <div className="space-y-4">
-        {rulesWithEntries.map((r) => (
-          <RecurringRuleCard
-            key={r.id}
-            rule={r as any}
-            canManage={canManage}
-            categories={categories ?? []}
-            subcategories={subcategories ?? []}
-            costCenters={costCenters ?? []}
-            bankAccounts={(bankAccounts ?? []) as any}
-            counterparties={counterparties ?? []}
-            paymentMethods={paymentMethods ?? []}
-          />
-        ))}
+      {rulesWithEntries.length === 0 ? (
+        <Card>
+          <p className="text-sm text-ink-faint">
+            Nenhuma recorrência criada ainda. Crie uma pela aba "Recorrente" ao criar uma nova
+            conta a pagar ou a receber.
+          </p>
+        </Card>
+      ) : (
+        <>
+          <div className="space-y-4">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-ink-faint">
+              Despesas ({despesas.length})
+            </h2>
+            {despesas.length === 0 ? (
+              <Card>
+                <p className="text-sm text-ink-faint">Nenhuma recorrência de despesa cadastrada.</p>
+              </Card>
+            ) : (
+              despesas.map((r) => (
+                <RecurringRuleCard
+                  key={r.id}
+                  rule={r as any}
+                  canManage={canManage}
+                  categories={categories ?? []}
+                  subcategories={subcategories ?? []}
+                  costCenters={costCenters ?? []}
+                  bankAccounts={(bankAccounts ?? []) as any}
+                  counterparties={counterparties ?? []}
+                  paymentMethods={paymentMethods ?? []}
+                />
+              ))
+            )}
+          </div>
 
-        {rulesWithEntries.length === 0 && (
-          <Card>
-            <p className="text-sm text-ink-faint">
-              Nenhuma recorrência criada ainda. Crie uma pela aba "Recorrente" ao criar uma nova
-              conta a pagar ou a receber.
-            </p>
-          </Card>
-        )}
-      </div>
+          <div className="space-y-4">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-ink-faint">
+              Receitas ({receitas.length})
+            </h2>
+            {receitas.length === 0 ? (
+              <Card>
+                <p className="text-sm text-ink-faint">Nenhuma recorrência de receita cadastrada.</p>
+              </Card>
+            ) : (
+              receitas.map((r) => (
+                <RecurringRuleCard
+                  key={r.id}
+                  rule={r as any}
+                  canManage={canManage}
+                  categories={categories ?? []}
+                  subcategories={subcategories ?? []}
+                  costCenters={costCenters ?? []}
+                  bankAccounts={(bankAccounts ?? []) as any}
+                  counterparties={counterparties ?? []}
+                  paymentMethods={paymentMethods ?? []}
+                />
+              ))
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 }
