@@ -22,6 +22,57 @@ function formatDate(value: string | null | undefined) {
   return `${day}/${month}/${year}`;
 }
 
+const MONTH_NAMES = [
+  "janeiro", "fevereiro", "março", "abril", "maio", "junho",
+  "julho", "agosto", "setembro", "outubro", "novembro", "dezembro",
+];
+
+type OpenEntryLike = { id: string; description: string; remaining: number; due_date: string; competence_date: string | null };
+
+/**
+ * Agrupa os lançamentos em aberto por mês — usa a competência quando
+ * existe (é o que o operador mais confunde: várias ocorrências da mesma
+ * recorrência com descrições iguais, diferindo só no mês), caindo para o
+ * vencimento quando não há competência informada. Grupos em ordem
+ * cronológica; dentro de cada grupo, por vencimento.
+ */
+function groupEntriesByMonth<T extends OpenEntryLike>(entries: T[]): { key: string; label: string; entries: T[] }[] {
+  const map = new Map<string, T[]>();
+  for (const e of entries) {
+    const refDate = e.competence_date ?? e.due_date;
+    const key = refDate.slice(0, 7); // "AAAA-MM"
+    if (!map.has(key)) map.set(key, []);
+    map.get(key)!.push(e);
+  }
+  return Array.from(map.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, groupEntries]) => {
+      const [year, month] = key.split("-");
+      const monthName = MONTH_NAMES[Number(month) - 1] ?? month;
+      return {
+        key,
+        label: `${monthName.charAt(0).toUpperCase()}${monthName.slice(1)} de ${year}`,
+        entries: [...groupEntries].sort((a, b) => a.due_date.localeCompare(b.due_date)),
+      };
+    });
+}
+
+/** Lançamento cujo vencimento está mais próximo da data da transação bancária — usado só como sugestão inicial, sempre editável. */
+function closestEntryTo<T extends OpenEntryLike>(entries: T[], referenceDate: string): T | null {
+  if (entries.length === 0) return null;
+  const targetTime = new Date(`${referenceDate}T00:00:00`).getTime();
+  let closest = entries[0];
+  let closestDiff = Math.abs(new Date(`${closest.due_date}T00:00:00`).getTime() - targetTime);
+  for (const e of entries.slice(1)) {
+    const diff = Math.abs(new Date(`${e.due_date}T00:00:00`).getTime() - targetTime);
+    if (diff < closestDiff) {
+      closest = e;
+      closestDiff = diff;
+    }
+  }
+  return closest;
+}
+
 /**
  * Converte o texto digitado num número, aceitando tanto ponto quanto
  * vírgula como separador decimal — o campo é type="number", que em tese
@@ -88,7 +139,13 @@ export function ReconciliationPanel({
   // Já abre com a categoria sugerida marcada (quando existe), para as
   // subcategorias filtrarem certo assim que o formulário aparece.
   const [selectedCategory, setSelectedCategory] = useState(suggestion?.categoryId ?? "");
-  const [selectedEntryId, setSelectedEntryId] = useState("");
+  // Já sugere o lançamento com vencimento mais próximo da data da
+  // transação bancária — só um ponto de partida, sempre editável. Ajuda
+  // bastante quando existem várias ocorrências de uma mesma recorrência
+  // (mesma descrição, meses diferentes), que é justamente onde o
+  // operador mais erra o mês.
+  const [selectedEntryId, setSelectedEntryId] = useState(() => closestEntryTo(openEntries, transactionDate)?.id ?? "");
+  const [entrySelectedManually, setEntrySelectedManually] = useState(false);
   // Valor digitado no campo "Valor a conciliar" — precisa ser controlado
   // para comparar com o saldo restante do lançamento escolhido e decidir
   // se mostra a escolha de liquidação parcial vs. total.
@@ -159,6 +216,7 @@ export function ReconciliationPanel({
           value={selectedEntryId}
           onChange={(e) => {
             setSelectedEntryId(e.target.value);
+            setEntrySelectedManually(true);
             setSettleChoice("parcial");
             setForceRetry(false);
           }}
@@ -166,16 +224,20 @@ export function ReconciliationPanel({
           <option value="" disabled>
             Selecione o lançamento em aberto
           </option>
-          {filteredEntries.map((e) => {
-            const venc = formatDate(e.due_date);
-            const comp = formatDate(e.competence_date);
-            return (
-              <option key={e.id} value={e.id}>
-                {e.description} — venc. {venc ?? "—"}
-                {comp ? ` · comp. ${comp}` : ""} — restante {formatCurrency(e.remaining)}
-              </option>
-            );
-          })}
+          {groupEntriesByMonth(filteredEntries).map((group) => (
+            <optgroup key={group.key} label={group.label}>
+              {group.entries.map((e) => {
+                const venc = formatDate(e.due_date);
+                const comp = formatDate(e.competence_date);
+                return (
+                  <option key={e.id} value={e.id}>
+                    {e.description} — venc. {venc ?? "—"}
+                    {comp ? ` · comp. ${comp}` : ""} — restante {formatCurrency(e.remaining)}
+                  </option>
+                );
+              })}
+            </optgroup>
+          ))}
         </Select>
         {selected && (
           <p className="text-xs text-ink-soft">
@@ -183,6 +245,12 @@ export function ReconciliationPanel({
             {" · "}
             Competência:{" "}
             <span className="font-medium text-ink">{formatDate(selected.competence_date) ?? "não informada"}</span>
+            {!entrySelectedManually && (
+              <>
+                {" · "}
+                <span className="text-ink-faint">sugestão pela data mais próxima — confira o mês antes de vincular</span>
+              </>
+            )}
           </p>
         )}
         {filteredEntries.length === 0 && (
