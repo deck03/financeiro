@@ -70,7 +70,7 @@ export async function GET(request: NextRequest) {
     const { data: settlements } = await supabase
       .from("financial_settlements")
       .select(
-        "amount, settlement_date, bank_accounts(display_name), financial_entries(type, description, counterparties(name), chart_account_categories(name, dre_behavior))"
+        "amount, settlement_date, bank_accounts(display_name), financial_entries(type, description, competence_date, counterparties(name), chart_account_categories(name, dre_behavior))"
       )
       .in("bank_account_id", accountIds)
       .eq("status", "valido")
@@ -100,8 +100,13 @@ export async function GET(request: NextRequest) {
     [`Saldo final (${formatDateBR(to)})`, saldoFinal],
   ];
 
+  // "Data" é a data de pagamento/recebimento (settlement_date, o que já
+  // existia); "Data de competência" foi adicionada ao lado — vem do
+  // lançamento (financial_entries.competence_date), pode ficar em branco
+  // quando o lançamento não tiver competência definida.
   const movHeaders = [
     "Data",
+    "Data de competência",
     "Tipo",
     "Classificação",
     "Descrição",
@@ -113,6 +118,7 @@ export async function GET(request: NextRequest) {
   const movRows = movimentos.map((s: any) => ({
     text: [
       formatDateBR(s.settlement_date),
+      s.financial_entries.competence_date ? formatDateBR(s.financial_entries.competence_date) : "",
       s.financial_entries.type === "receita" ? "Entrada" : "Saída",
       isPartnerItem(s) ? "Sócios/pessoa física" : "Operacional",
       s.financial_entries.description ?? "",
@@ -140,8 +146,10 @@ export async function GET(request: NextRequest) {
       {
         name: "Movimentos",
         headers: movHeaders,
+        // "Valor (R$)" agora é a 9ª coluna (índice 8) — uma coluna a mais
+        // por causa da "Data de competência" inserida logo após "Data".
         rows: movRows.map((r) => [...r.text, r.amount]),
-        currencyColumns: [7],
+        currencyColumns: [8],
       },
     ];
     const bytes = await buildWorkbook(sheets);
