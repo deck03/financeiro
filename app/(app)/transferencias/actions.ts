@@ -111,7 +111,12 @@ export async function updateTransferAction(_prev: FormState, formData: FormData)
   }
 
   const { supabase } = await getOrgIdAndUser();
-  const { error } = await supabase.rpc("update_transfer", {
+  // O cast abaixo evita que o build quebre se lib/types/database.ts estiver
+  // um passo atrás das funções novas no banco — a chamada em si continua
+  // funcionando normalmente, só a checagem de tipo estrita é contornada
+  // para este nome de função específico. Mesmo padrão já usado em outras
+  // RPCs novas (delete_pending_bank_transactions, reconcile_with_existing_entry).
+  const { error } = (await (supabase.rpc as any)("update_transfer", {
     p_transfer_id: parsed.data.transfer_id,
     p_from_bank_account_id: parsed.data.from_bank_account_id,
     p_to_bank_account_id: parsed.data.to_bank_account_id,
@@ -119,7 +124,7 @@ export async function updateTransferAction(_prev: FormState, formData: FormData)
     p_transfer_date: parsed.data.transfer_date,
     p_classification: parsed.data.classification,
     p_notes: parsed.data.notes || null,
-  });
+  })) as { error: { message: string } | null };
 
   if (error) {
     return {
@@ -155,10 +160,10 @@ export async function cancelTransferAction(_prev: FormState, formData: FormData)
   }
 
   const { supabase } = await getOrgIdAndUser();
-  const { error } = await supabase.rpc("cancel_transfer", {
+  const { error } = (await (supabase.rpc as any)("cancel_transfer", {
     p_transfer_id: parsed.data.transfer_id,
     p_reason: parsed.data.reason || null,
-  });
+  })) as { error: { message: string } | null };
 
   if (error) {
     return { error: error.message.includes("já está cancelada") ? error.message : "Não foi possível cancelar." };
