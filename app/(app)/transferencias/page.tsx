@@ -2,17 +2,8 @@ import { createClient } from "@/lib/supabase/server";
 import { hasPermission } from "@/lib/permissions";
 import { Card } from "@/components/ui/card";
 import { NewTransferForm } from "./new-transfer-form";
-import { TRANSFER_CLASSIFICATION_LABELS } from "@/lib/labels/transferencias";
+import { TransferRow } from "./transfer-row";
 import { ExportButtons } from "@/components/export-buttons";
-
-function formatCurrency(value: number) {
-  return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
-}
-
-function formatDate(value: string) {
-  const [year, month, day] = value.split("-");
-  return `${day}/${month}/${year}`;
-}
 
 export default async function TransferenciasPage() {
   const supabase = createClient();
@@ -28,7 +19,7 @@ export default async function TransferenciasPage() {
   const { data: transfers } = await supabase
     .from("transfers")
     .select(
-      "id, amount, transfer_date, classification, notes, from:from_bank_account_id(display_name), to:to_bank_account_id(display_name)"
+      "id, amount, transfer_date, classification, notes, status, from_bank_account_id, to_bank_account_id, from:from_bank_account_id(display_name), to:to_bank_account_id(display_name)"
     )
     .order("transfer_date", { ascending: false })
     .limit(100);
@@ -68,21 +59,16 @@ export default async function TransferenciasPage() {
                 <th className="py-2 pr-4 font-medium">Destino</th>
                 <th className="py-2 pr-4 font-medium">Classificação</th>
                 <th className="py-2 pr-4 font-medium num">Valor</th>
+                {canCreate && <th className="py-2 pr-4 font-medium">Ações</th>}
               </tr>
             </thead>
             <tbody>
               {(transfers ?? []).map((t: any) => (
-                <tr key={t.id} className="border-b border-base-border last:border-0">
-                  <td className="py-2 pr-4 text-ink-soft">{formatDate(t.transfer_date)}</td>
-                  <td className="py-2 pr-4 text-ink">{t.from?.display_name}</td>
-                  <td className="py-2 pr-4 text-ink">{t.to?.display_name}</td>
-                  <td className="py-2 pr-4 text-ink-soft">{TRANSFER_CLASSIFICATION_LABELS[t.classification]}</td>
-                  <td className="num py-2 pr-4 text-ink">{formatCurrency(t.amount)}</td>
-                </tr>
+                <TransferRow key={t.id} transfer={t} bankAccounts={(bankAccounts ?? []) as any} canManage={canCreate} />
               ))}
               {(transfers ?? []).length === 0 && (
                 <tr>
-                  <td colSpan={5} className="py-6 text-center text-ink-faint">
+                  <td colSpan={canCreate ? 6 : 5} className="py-6 text-center text-ink-faint">
                     Nenhuma transferência registrada.
                   </td>
                 </tr>
