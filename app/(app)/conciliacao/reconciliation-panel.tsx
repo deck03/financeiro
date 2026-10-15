@@ -29,6 +29,14 @@ const MONTH_NAMES = [
 
 type OpenEntryLike = { id: string; description: string; remaining: number; due_date: string; competence_date: string | null };
 
+type LinkKind = "recorrente" | "agendado" | "outros";
+
+const LINK_KIND_LABELS: Record<LinkKind, string> = {
+  recorrente: "lançamento recorrente",
+  agendado: "lançamento agendado",
+  outros: "outro lançamento em aberto",
+};
+
 /**
  * Agrupa os lançamentos em aberto por mês — usa a competência quando
  * existe (é o que o operador mais confunde: várias ocorrências da mesma
@@ -95,7 +103,24 @@ function SubmitButton({ label }: { label: string }) {
   );
 }
 
-type OpenEntry = { id: string; description: string; remaining: number; due_date: string; competence_date: string | null };
+type OpenEntry = {
+  id: string;
+  description: string;
+  remaining: number;
+  due_date: string;
+  competence_date: string | null;
+  isRecurring: boolean;
+  isScheduled: boolean;
+};
+
+// Recorrente = veio de uma regra de recorrência. Agendado = pagamento já
+// agendado. Um lançamento recorrente que também está agendado aparece nas
+// duas listas. "Outros" = o que não é nem recorrente nem agendado.
+function entriesOfKind(entries: OpenEntry[], kind: LinkKind): OpenEntry[] {
+  if (kind === "recorrente") return entries.filter((e) => e.isRecurring);
+  if (kind === "agendado") return entries.filter((e) => e.isScheduled);
+  return entries.filter((e) => !e.isRecurring && !e.isScheduled);
+}
 type Option = { id: string; name: string };
 type CategoryOption = Option & { type: string };
 type Suggestion = {
@@ -133,6 +158,7 @@ export function ReconciliationPanel({
   suggestion?: Suggestion | null;
 }) {
   const [mode, setMode] = useState<"closed" | "existing" | "new">("closed");
+  const [linkKind, setLinkKind] = useState<LinkKind>("recorrente");
   const [isPending, startTransition] = useTransition();
   const [existingState, existingAction] = useFormState(reconcileWithExistingEntryAction, initialState);
   const [newState, newAction] = useFormState(reconcileWithNewEntryAction, initialState);
@@ -144,7 +170,7 @@ export function ReconciliationPanel({
   // bastante quando existem várias ocorrências de uma mesma recorrência
   // (mesma descrição, meses diferentes), que é justamente onde o
   // operador mais erra o mês.
-  const [selectedEntryId, setSelectedEntryId] = useState(() => closestEntryTo(openEntries, transactionDate)?.id ?? "");
+  const [selectedEntryId, setSelectedEntryId] = useState("");
   const [entrySelectedManually, setEntrySelectedManually] = useState(false);
   // Valor digitado no campo "Valor a conciliar" — precisa ser controlado
   // para comparar com o saldo restante do lançamento escolhido e decidir
@@ -157,6 +183,16 @@ export function ReconciliationPanel({
   // hora sem precisar preencher tudo de novo.
   const [forceRetry, setForceRetry] = useState(false);
 
+  function openLink(kind: LinkKind) {
+    setLinkKind(kind);
+    setSelectedEntryId(closestEntryTo(entriesOfKind(openEntries, kind), transactionDate)?.id ?? "");
+    setEntrySelectedManually(false);
+    setAmountInput("");
+    setSettleChoice("parcial");
+    setForceRetry(false);
+    setMode("existing");
+  }
+
   if (existingState.success || newState.success) {
     return <span className="text-xs text-ink-faint">Conciliada</span>;
   }
@@ -164,12 +200,24 @@ export function ReconciliationPanel({
   if (mode === "closed") {
     return (
       <div className="flex flex-wrap items-center gap-3">
-        <button type="button" onClick={() => setMode("existing")} className="text-sm font-medium text-brand-accent hover:underline">
-          Vincular a lançamento
-        </button>
+        {(["recorrente", "agendado"] as LinkKind[]).map((kind) => (
+          <button
+            key={kind}
+            type="button"
+            onClick={() => openLink(kind)}
+            className="text-sm font-medium text-brand-accent hover:underline"
+          >
+            Vincular a {LINK_KIND_LABELS[kind]} ({entriesOfKind(openEntries, kind).length})
+          </button>
+        ))}
         <button type="button" onClick={() => setMode("new")} className="text-sm font-medium text-brand-accent hover:underline">
           Criar lançamento
         </button>
+        {entriesOfKind(openEntries, "outros").length > 0 && (
+          <button type="button" onClick={() => openLink("outros")} className="text-sm font-medium text-ink-soft hover:underline">
+            Outro em aberto ({entriesOfKind(openEntries, "outros").length})
+          </button>
+        )}
         <button
           type="button"
           disabled={isPending}
@@ -188,7 +236,7 @@ export function ReconciliationPanel({
   }
 
   if (mode === "existing") {
-    const filteredEntries = openEntries;
+    const filteredEntries = entriesOfKind(openEntries, linkKind);
     const selected = filteredEntries.find((e) => e.id === selectedEntryId);
 
     // Valor que de fato vai ser considerado se o campo "Valor a conciliar"
@@ -210,6 +258,9 @@ export function ReconciliationPanel({
           name="mark_as_fully_settled"
           value={(amountDiffers && settleChoice === "total") || forceRetry ? "on" : ""}
         />
+        <p className="text-xs font-medium uppercase tracking-wide text-ink-faint">
+          Vincular a {LINK_KIND_LABELS[linkKind]}
+        </p>
         <Select
           name="entry_id"
           required
@@ -222,7 +273,7 @@ export function ReconciliationPanel({
           }}
         >
           <option value="" disabled>
-            Selecione o lançamento em aberto
+            Selecione o {LINK_KIND_LABELS[linkKind]}
           </option>
           {groupEntriesByMonth(filteredEntries).map((group) => (
             <optgroup key={group.key} label={group.label}>
@@ -254,7 +305,7 @@ export function ReconciliationPanel({
           </p>
         )}
         {filteredEntries.length === 0 && (
-          <p className="text-xs text-ink-faint">Nenhum lançamento em aberto do tipo esperado para esta transação.</p>
+          <p className="text-xs text-ink-faint">Nenhum {LINK_KIND_LABELS[linkKind]} encontrado para esta transação.</p>
         )}
         <div>
           <Label htmlFor={`amount-${bankTransactionId}`}>
