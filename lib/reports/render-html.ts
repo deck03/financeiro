@@ -32,20 +32,69 @@ export function renderWeeklyReportHtml(data: WeeklyReportData): string {
     alerts.push(`Diferença de saldo em "${diff.accountName}": ${formatCurrency(diff.difference)} (conferido em ${formatDate(diff.date)})`);
   }
 
+  // 1) Última conciliação bancária — destaque vermelho se faz mais de 7 dias.
+  const rec = data.lastReconciliation;
+  const recStale = !rec || rec.daysAgo > 7;
+  const recColor = recStale ? "#B3402A" : "#2E6F5E";
+  const recBg = recStale ? "#FBEDEA" : "#EAF4F0";
+  const recTitle = rec
+    ? `${formatDate(rec.doneOn)} — ${rec.daysAgo === 0 ? "hoje" : rec.daysAgo === 1 ? "há 1 dia" : `há ${rec.daysAgo} dias`}`
+    : "Nenhuma conciliação feita até agora";
+  const recDetail = rec?.statementUpTo ? `Extrato conciliado até ${formatDate(rec.statementUpTo)}.` : "";
+  const recPending = data.unreconciledCount > 0 ? ` ${data.unreconciledCount} transação(ões) aguardando conciliação.` : "";
+
+  // 2) Posição de caixa + evolução projetada em 15 dias.
+  const p15 = data.projection15;
+  const maxAbs = Math.max(1, ...p15.days.map((d) => Math.abs(d.balance)));
+  const evolutionRows = p15.days
+    .map((d, i) => {
+      const width = Math.max(2, Math.round((Math.abs(d.balance) / maxAbs) * 100));
+      const barColor = d.balance < 0 ? "#B3402A" : "#2E6F5E";
+      const isMin = d.date === p15.minBalanceDate && p15.minBalance < data.availableBalance;
+      const deltaText =
+        d.delta === 0 ? "" : `${d.delta > 0 ? "+" : "−"}${formatCurrency(Math.abs(d.delta))}`;
+      const deltaColor = d.delta >= 0 ? "#2E6F5E" : "#B3402A";
+      return `<tr>
+        <td style="padding:3px 6px 3px 0;font-size:12px;color:#5B6270;white-space:nowrap;">${i === 0 ? "Hoje" : formatDate(d.date).slice(0, 5)}</td>
+        <td style="padding:3px 6px;width:38%;"><div style="background:#E6E9EE;border-radius:3px;"><div style="width:${width}%;height:8px;background:${barColor};border-radius:3px;"></div></div></td>
+        <td style="padding:3px 6px;font-size:12px;text-align:right;color:${deltaColor};white-space:nowrap;">${deltaText}</td>
+        <td style="padding:3px 0 3px 6px;font-size:12px;text-align:right;font-weight:${isMin ? 700 : 600};color:${d.balance < 0 ? "#B3402A" : "#1C1F26"};white-space:nowrap;">${formatCurrency(d.balance)}${isMin ? " ▼" : ""}</td>
+      </tr>`;
+    })
+    .join("");
+  const variation = p15.finalBalance - data.availableBalance;
+
   return `
   <div style="${WRAPPER_STYLE}">
     <h1 style="font-size: 18px; margin-bottom: 4px;">Relatório semanal — ${data.organizationName}</h1>
     <p style="color:#5B6270; font-size: 13px; margin-top:0;">Gerado em ${formatDate(new Date().toISOString().slice(0, 10))}</p>
 
-    <div style="${CARD_STYLE}">
-      <p style="${LABEL_STYLE}">Saldo empresarial disponível</p>
-      <p style="${VALUE_STYLE}">${formatCurrency(data.businessBalance)}</p>
+    <div style="background:${recBg}; border-left: 4px solid ${recColor}; border-radius: 8px; padding: 14px 16px; margin-bottom: 12px;">
+      <p style="${LABEL_STYLE}">Última conciliação bancária</p>
+      <p style="${VALUE_STYLE} color:${recColor};">${recTitle}</p>
+      ${recDetail || recPending ? `<p style="font-size:13px;color:#5B6270;margin:4px 0 0;">${recDetail}${recPending}</p>` : ""}
     </div>
 
-    <h2 style="${H2_STYLE}">Saldo por conta</h2>
+    <div style="${CARD_STYLE}">
+      <p style="${LABEL_STYLE}">Posição de caixa — saldo empresarial disponível</p>
+      <p style="font-size: 28px; font-weight: 700; color: ${data.businessBalance < 0 ? "#B3402A" : "#1C1F26"}; margin: 4px 0 0;">${formatCurrency(data.businessBalance)}</p>
+    </div>
     <table style="width:100%; border-collapse: collapse;">
       ${data.accountBalances.map((a) => row(a.name, formatCurrency(a.balance))).join("")}
     </table>
+
+    <h2 style="${H2_STYLE}">Evolução do saldo projetado — próximos 15 dias</h2>
+    <table style="width:100%; border-collapse: collapse; margin-bottom: 8px;">
+      ${row("Saldo hoje", formatCurrency(data.availableBalance))}
+      ${row("Saldo projetado em 15 dias", formatCurrency(p15.finalBalance))}
+      ${row("Variação no período", `${variation >= 0 ? "+" : "−"}${formatCurrency(Math.abs(variation))}`)}
+      ${row("Menor saldo previsto", `${formatCurrency(p15.minBalance)} (${formatDate(p15.minBalanceDate).slice(0, 5)})`)}
+      ${p15.negativeDaysCount > 0 ? row("Dias com saldo negativo", `<span style="color:#B3402A;">${p15.negativeDaysCount}</span>`) : ""}
+    </table>
+    <table style="width:100%; border-collapse: collapse;">
+      ${evolutionRows}
+    </table>
+    <p style="font-size:11px;color:#8A909C;margin:6px 0 0;">Considera lançamentos em aberto e agendados; vencidos entram como pagos/recebidos hoje. ▼ = menor saldo do período.</p>
 
     ${
       data.personalAccountBalances.length > 0
@@ -56,18 +105,17 @@ export function renderWeeklyReportHtml(data: WeeklyReportData): string {
         : ""
     }
 
-    <h2 style="${H2_STYLE}">Caixa projetado</h2>
-    <table style="width:100%; border-collapse: collapse;">
-      ${row("7 dias", formatCurrency(data.projection7))}
-      ${row("30 dias", formatCurrency(data.projection30))}
-      ${row("60 dias", formatCurrency(data.projection60))}
-      ${row("90 dias", formatCurrency(data.projection90))}
-    </table>
-
     <h2 style="${H2_STYLE}">Próximos 7 dias</h2>
     <table style="width:100%; border-collapse: collapse;">
       ${row("Entradas previstas", formatCurrency(data.entradasProximos7Dias))}
       ${row("Saídas previstas", formatCurrency(data.saidasProximos7Dias))}
+    </table>
+
+    <h2 style="${H2_STYLE}">Caixa projetado (horizontes maiores)</h2>
+    <table style="width:100%; border-collapse: collapse;">
+      ${row("30 dias", formatCurrency(data.projection30))}
+      ${row("60 dias", formatCurrency(data.projection60))}
+      ${row("90 dias", formatCurrency(data.projection90))}
     </table>
 
     ${
