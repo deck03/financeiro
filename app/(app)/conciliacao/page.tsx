@@ -98,13 +98,13 @@ export default async function ConciliacaoPage({
       .limit(50),
     supabase
       .from("financial_entries")
-      .select("id, description, due_date, competence_date, original_amount")
+      .select("id, description, due_date, competence_date, original_amount, status, recurring_rule_id")
       .eq("type", "despesa")
       .in("status", ["em_aberto", "agendado", "parcialmente_pago"])
       .order("due_date"),
     supabase
       .from("financial_entries")
-      .select("id, description, due_date, competence_date, original_amount")
+      .select("id, description, due_date, competence_date, original_amount, status, recurring_rule_id")
       .eq("type", "receita")
       .in("status", ["em_aberto", "agendado", "parcialmente_recebido"])
       .order("due_date"),
@@ -132,6 +132,8 @@ export default async function ConciliacaoPage({
       description: e.description,
       due_date: e.due_date,
       competence_date: e.competence_date,
+      isRecurring: !!e.recurring_rule_id,
+      isScheduled: e.status === "agendado",
       remaining: computeRemainingBalance(Number(e.original_amount), e.id, settlements ?? []),
     }));
   }
